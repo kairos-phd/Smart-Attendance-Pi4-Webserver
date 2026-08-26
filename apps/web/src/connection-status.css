@@ -1,0 +1,15 @@
+.dot.bad { background: #ef718b; box-shadow: 0 0 0 3px #ef718b1f; }
+.dot.pending { background: #8d9ab7; animation: connection-pulse 1.1s ease-in-out infinite alternate; }
+.service-disabled form { opacity: .58; }
+.service-disabled .file-picker { cursor: not-allowed; }
+.file-picker[aria-disabled="true"] { pointer-events: none; }
+.user-row button:disabled { opacity: .38; }
+
+@keyframes connection-pulse {
+  from { opacity: .45; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot.pending { animation: none; }
+}

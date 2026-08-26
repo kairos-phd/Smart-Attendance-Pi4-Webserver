@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-attendance-edge"
+version = "0.1.0"
+description = "Event-triggered two-camera attendance service for Raspberry Pi"
+requires-python = ">=3.10"
+dependencies = [
+  "firebase-admin>=6.5,<7",
+  "insightface>=0.7.3,<0.8",
+  "numpy>=1.24,<3",
+  "onnxruntime>=1.17,<2",
+  "opencv-python-headless>=4.8,<5",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.scripts]
+smart-attendance-edge = "attendance_edge.main:main"
+
+[tool.setuptools.packages.find]
+include = ["attendance_edge*"]

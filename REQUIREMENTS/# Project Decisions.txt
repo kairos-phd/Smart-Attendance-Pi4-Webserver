@@ -1,0 +1,102 @@
+# Project Decisions
+
+## Decision 001
+Date: 2026-08-09
+
+Use Raspberry Pi 4 4GB as the primary edge computer.
+
+Reason:
+Sufficient for the expected project scale and more capable than an
+ESP32 for multi-camera processing.
+
+## Decision 002
+
+Use 2 cameras as the primary implementation.
+
+3 cameras are an optional extension.
+
+## Decision 003
+
+Do not use PIR.
+
+Reason:
+OpenCV motion detection can provide the trigger without additional
+hardware.
+
+## Decision 004
+
+Do not continuously run expensive AI inference.
+
+Use:
+
+Camera idle
+→ Motion Detection
+→ Capture
+→ Face Detection
+→ Face Recognition
+→ Database
+→ Dashboard
+→ Idle
+
+## Decision 005
+
+Current AI candidates:
+
+Face Detection: SCRFD
+Face Recognition: InsightFace / ArcFace
+
+These remain subject to actual Raspberry Pi performance testing.
+
+## Decision 006
+
+Firebase is the current cloud/database candidate.
+
+## Decision 007
+
+Dashboard technology is currently ReactJS, subject to project
+requirements and development complexity.
+
+## Decision 008
+Date: 2026-08-09
+
+Use Firebase Authentication, Firestore and Storage as the shared
+cloud layer. Introduce a minimal FastAPI administrator gateway only
+for privileged face enrollment and user management.
+
+Reason:
+The browser and mobile application must never receive Firebase Admin
+credentials or create face embeddings. The gateway avoids an
+unnecessary general backend while protecting this sensitive operation.
+
+## Decision 009
+Date: 2026-08-09
+
+Implement a React Native / Expo mobile companion after the edge MVP.
+
+Reason:
+It was explicitly requested. It reads the same Firebase data on
+Android and iOS; facial enrollment remains dashboard-only so the
+mobile scope does not threaten the two-camera MVP.
+
+## Decision 010
+Date: 2026-08-09
+
+Use InsightFace `buffalo_sc` (SCRFD detection plus ArcFace-style
+embeddings) through CPU ONNX Runtime as the initial AI stack.
+
+Status:
+Superseded by Decision 011 for the MVP deployment architecture. The same
+model remains selected, but it now runs on the laptop instead of the Pi.
+
+## Decision 011
+Date: 2026-08-11
+
+Run SCRFD/InsightFace recognition and attendance decisions on the laptop.
+Use the Raspberry Pi 4 as the two-camera capture, sampling, and retry-queue
+transport device.
+
+Reason:
+This gives the AI more CPU/RAM headroom, makes model development easier,
+and keeps the Pi reliable while handling two camera inputs. Firebase Storage
+remains optional because enrollment and unknown-person images can stay on the
+laptop for the MVP.

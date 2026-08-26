@@ -1,0 +1,29 @@
+OS:
+Raspberry Pi OS
+
+Language:
+Python
+
+Computer Vision:
+OpenCV
+
+Face Detection:
+SCRFD/Deepface
+
+Face Recognition:
+InsightFace / ArcFace
+
+Backend:
+TBD / FastAPI candidate
+
+Database:
+Firebase Firestore
+
+Storage:
+Firebase Storage
+
+Frontend:
+ReactJS candidate
+
+Version Control:
+Git + GitHub

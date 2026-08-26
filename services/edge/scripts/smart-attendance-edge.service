@@ -1,0 +1,16 @@
+[Unit]
+Description=Smart Attendance Raspberry Pi edge service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=REPLACE_SERVICE_USER
+WorkingDirectory=REPLACE_PROJECT_PATH/services/edge
+ExecStart=REPLACE_PROJECT_PATH/services/edge/.venv/bin/python -m attendance_edge.main
+Restart=on-failure
+RestartSec=8
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

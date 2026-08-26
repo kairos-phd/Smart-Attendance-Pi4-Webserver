@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-attendance-backend"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.111,<1",
+  "firebase-admin>=6.5,<7",
+  "opencv-python-headless>=4.8,<5",
+  "python-dotenv>=1.0,<2",
+  "python-multipart>=0.0.9,<1",
+  "requests>=2.32,<3",
+  "tzdata>=2025.2",
+  "uvicorn[standard]>=0.30,<1",
+]
+
+[project.optional-dependencies]
+ai = [
+  "insightface>=1.0.1,<2",
+  "onnxruntime>=1.17,<2",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Attendra",
+    "slug": "smart-attendance",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "attendra",
+    "android": { "package": "com.example.smartattendance" },
+    "ios": { "bundleIdentifier": "com.example.smartattendance" },
+    "plugins": []
+  }
+}

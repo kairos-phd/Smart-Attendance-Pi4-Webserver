@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function admin() { return signedIn() && request.auth.token.admin == true; }
+    function owner(userId) { return signedIn() && request.auth.uid == userId; }
+    function verifiedViewer() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/accounts/$(request.auth.uid));
+    }
+
+    match /accounts/{userId} {
+      allow get: if owner(userId) || admin();
+      // Account lists are returned only by the administrator API, which filters
+      // the response and uses the Admin SDK outside these client rules.
+      allow list: if false;
+      allow create: if owner(userId)
+        && request.resource.data.keys().hasOnly([
+          'username', 'username_normalized', 'date_of_birth', 'email',
+          'email_verified', 'requires_email_verification', 'created_at'
+        ])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.email_verified == false
+        && request.resource.data.requires_email_verification == true;
+      allow update, delete: if admin();
+    }
+
+    match /usernames/{username} {
+      allow get: if signedIn();
+      allow list: if admin();
+      allow create: if signedIn()
+        && username.matches('^[a-z0-9_]{3,24}$')
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/accounts/$(request.auth.uid)).data.username_normalized == username;
+      // Usernames remain reserved to prevent impersonation and accidental reuse.
+      allow update, delete: if false;
+    }
+
+    match /users/{userId} {
+      // Face embeddings never leave the trusted backend through a client SDK.
+      // Administrator UI operations use the authenticated FastAPI service.
+      allow get, list, create, update, delete: if false;
+    }
+    match /attendance/{attendanceId} {
+      // Attendance is shared operational data, not user-owned account data.
+      // Only verified project accounts may use the viewer dashboard.
+      allow read: if verifiedViewer() || admin();
+      allow write: if false; // Edge service/Admin SDK writes bypass rules.
+    }
+    match /unknown_events/{eventId} {
+      // Unknown-person events are sensitive security data.
+      allow read: if admin();
+      allow write: if false;
+    }
+    match /cameras/{cameraId} {
+      allow read: if verifiedViewer() || admin();
+      allow write: if false;
+    }
+    match /devices/{deviceId} {
+      allow read: if verifiedViewer() || admin();
+      allow write: if false;
+    }
+    match /sessions/{userId} {
+      // Minimal authenticated presence for the administrator dashboard.
+      allow get: if owner(userId) || admin();
+      allow list: if admin();
+      allow create, update: if owner(userId)
+        && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'display_name', 'current_tab', 'visibility', 'last_seen'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.current_tab.matches('^(overview|attendance|users|unknown|devices|admin)$')
+        && request.resource.data.visibility.matches('^(active|hidden)$');
+      allow delete: if owner(userId) || admin();
+    }
+    match /system_logs/{logId} {
+      allow read: if admin();
+      allow write: if false;
+    }
+  }
+}

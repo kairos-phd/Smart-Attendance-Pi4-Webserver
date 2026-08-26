@@ -1,0 +1,24 @@
+Test 01: Local static and offline-queue validation
+Date: 2026-08-09
+
+Environment:
+- Development workspace bundled Python runtime on Windows
+- No Raspberry Pi, camera, Firebase project, Node.js dependency tree or
+  physical hardware was available to this validation.
+
+Executed:
+- Compiled all Python source in services/edge/attendance_edge and
+  services/backend/app with compileall.
+- Created a temporary SQLite LocalStore; verified first attendance is
+  accepted, same user is suppressed across both cameras during the
+  cooldown window, and a pending event is retained.
+
+Result: PASS
+
+Limitations:
+- This does not validate InsightFace installation/model download,
+  camera access, Firebase connectivity, systemd startup, React build,
+  mobile build or any recognition performance.
+- The dashboard dependency install was not completed in the available
+  local validation time. Run the documented install/build commands on
+  a prepared development machine before integration.

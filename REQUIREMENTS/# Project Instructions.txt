@@ -1,0 +1,47 @@
+# Project Instructions
+
+This folder contains the complete knowledge base for the Smart
+Attendance IoT project.
+
+Source priority:
+
+1. Master Prompt
+2. Project-specific documents
+3. Project Decisions
+4. Project Management
+5. SIC course materials
+6. General technical knowledge
+
+Project-specific documents represent the current state of the project.
+
+If two project documents conflict:
+- Prefer the newer Change Log entry.
+- Prefer explicit Project Decisions over assumptions.
+- Do not silently change an established decision.
+- Identify the conflict and ask for clarification when necessary.
+
+The SIC course PDFs provide educational context and should not
+override project-specific technical decisions.
+
+Do not assume optional features are part of the MVP.
+
+Current project constraints:
+- 2 students
+- Maximum 8 weeks
+- Raspberry Pi 4 4GB
+- 2 cameras
+- Core objective is a functional smart attendance system
+- Optional features must not compromise the MVP.
+
+When recommending hardware or software:
+- Prioritize low cost.
+- Prefer components already available.
+- Prefer software that can run on the target hardware.
+- Consider actual Raspberry Pi 4 limitations.
+- Avoid unnecessary complexity.
+
+When proposing implementation:
+- Build incrementally.
+- Test each major component before integration.
+- Do not optimize based on assumptions.
+- Use actual testing results whenever available.

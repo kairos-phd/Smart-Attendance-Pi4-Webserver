@@ -1,0 +1,29 @@
+# System Architecture
+
+Camera 1 ─┐
+          │
+Camera 2 ─┤
+          ↓
+   Raspberry Pi 4
+          │
+          ├── OpenCV Motion Detection
+          │
+          ├── Image Capture
+          │
+          ├── SCRFD/Deepface Face Detection
+          │
+          ├── InsightFace / ArcFace (optional, depends on the face detection model)
+          │
+          └── Attendance Processing
+                    │
+                    ↓
+                 Firebase
+                    │
+                    ↓
+              Web Dashboard
+
+The cameras do not continuously run expensive AI inference.
+
+Motion detection is lightweight.
+
+AI processing starts only after relevant activity is detected.

@@ -1,0 +1,16 @@
+[Unit]
+Description=Smart Attendance privileged FastAPI gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=REPLACE_SERVICE_USER
+WorkingDirectory=REPLACE_PROJECT_PATH/services/backend
+ExecStart=REPLACE_PROJECT_PATH/services/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=8
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,33 @@
+# Project Overview
+
+Project name:
+Smart Attendance System Using Raspberry Pi 4 and AI Face Recognition
+
+Project type:
+IoT / Edge Computing / AI / Computer Vision
+
+Team size:
+2 students
+
+Target application:
+Classroom and small-office attendance.
+
+Main objective:
+Develop a smart attendance system that automatically detects people,
+recognizes registered faces, records attendance, and provides a web/application (if possible to create an app)
+dashboard for management.
+
+Core concept:
+Two cameras are connected to a Raspberry Pi 4. The cameras remain in
+an idle/lightweight monitoring state. OpenCV motion detection is used
+to detect activity, motion detection can be detected using sensor. When movement is detected, the system captures
+one or more frames and performs face detection and face recognition.
+
+The Raspberry Pi performs edge-side processing and communicates with
+the database/cloud when necessary.
+
+The system should be designed to minimize unnecessary CPU usage,
+hardware cost, and system complexity.
+
+The project is intended as a university SIC final project and must
+be realistically achievable by six students.

@@ -1,0 +1,5 @@
+export type FirestoreTimestampLike = { toDate: () => Date };
+export type Attendance = { id: string; attendance_id: string; name: string; user_id: string; camera_id: string; date: string; confidence: number; status: 'recognized'; raspberry_pi_id: string; timestamp?: FirestoreTimestampLike; created_at?: FirestoreTimestampLike };
+export type Unknown = { id: string; event_id: string; camera_id: string; confidence: number; recognition_status: 'unknown'; raspberry_pi_id: string; image_url?: string | null; timestamp?: FirestoreTimestampLike; created_at?: FirestoreTimestampLike };
+export type Camera = { id: string; camera_id: string; name: string; location?: string; status: 'online' | 'offline'; raspberry_pi_id: string; last_error?: string | null; last_seen?: FirestoreTimestampLike; software_version?: string };
+export type Device = { id: string; device_id: string; name: string; device_type: 'raspberry_pi' | 'laptop_ai'; status: 'online' | 'offline'; last_error?: string | null; last_seen?: FirestoreTimestampLike; software_version?: string };
