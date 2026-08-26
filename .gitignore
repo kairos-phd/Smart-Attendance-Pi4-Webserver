@@ -32,3 +32,5 @@ web-build/
 Thumbs.db
 .vscode/
 *.log
+
+FACES/
