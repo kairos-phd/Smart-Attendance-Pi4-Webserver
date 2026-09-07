@@ -9,7 +9,8 @@ service firebase.storage {
       allow write: if false; // Admin SDK only.
     }
     match /registration/{allPaths=**} {
-      allow read, write: if admin();
+      allow read: if admin();
+      allow write: if false;
     }
     match /{allPaths=**} {
       allow read, write: if false;

@@ -42,18 +42,18 @@
 
 ## Acceptance checks
 
-- `v4l2-ctl --list-devices` shows two stable camera paths.
-- Edge logs report each camera online.
+- `v4l2-ctl --list-devices` shows stable camera paths for connected cameras (1, 2, or 3 cameras).
+- Edge logs report each available camera online; any disconnected camera is logged as offline and retried asynchronously without affecting active cameras.
 - Walking into each camera view creates one event, rather than constant duplicates.
 - A registered face produces an attendance record; an unregistered face produces an unknown event.
 - Disconnecting Wi-Fi queues events and reconnecting flushes the queue.
-- Dashboard and mobile data match Firestore.
+- Dashboard at `https://sic4b.io.vn/` displays live camera health (`online/total`), supports camera filtering, and matches Firestore.
 
 ## Common problems
 
 | Symptom | Check |
 | --- | --- |
-| Only one webcam opens | Verify `/dev/v4l/by-id` paths, test each with `ffplay`/`v4l2-ctl`, reduce resolution/FPS, and check USB power. |
+| Only 1 or 2 webcams open | Normal when only 1 or 2 are plugged in: edge service keeps running for available cameras. For missing cameras, verify `/dev/v4l/by-id` paths, test with `v4l2-ctl`, and check USB hub power. |
 | First AI run is slow/fails | InsightFace downloads its model on first use. Pre-cache it with Internet before the demonstration and confirm `MODEL_ROOT`. |
 | No records in Firebase | Check service-account path/permissions, device clock, outbound network and `journalctl` errors. Pending events remain in `data/edge.db`. |
 | Duplicate attendance | Increase `ATTENDANCE_COOLDOWN_SECONDS`; do not lower it until real testing shows a need. |
@@ -62,4 +62,4 @@
 
 ## Demo fallback
 
-Pre-register at least two consented test users, warm the models after boot, have a network hotspot/router ready, and keep a recent camera test log. Do not introduce optional peripherals, continuous streaming or a third camera during final integration.
+Pre-register at least two consented test users, warm the models after boot, have a network hotspot/router ready, and keep a recent camera test log. The system runs reliably with 1, 2, or 3 active cameras.

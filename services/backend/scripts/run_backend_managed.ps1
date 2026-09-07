@@ -5,9 +5,12 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $backendRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-$runner = Join-Path $PSScriptRoot 'run_backend.ps1'
+$projectRoot = (Resolve-Path -LiteralPath (Join-Path $backendRoot '..\..')).Path
 $logDirectory = Join-Path $backendRoot 'logs'
 $logFile = Join-Path $logDirectory 'fastapi-managed.log'
+$python = Join-Path $backendRoot '.venv\Scripts\python.exe'
+$cloudflared = 'C:\Program Files (x86)\cloudflared\cloudflared.exe'
+$tunnelConfig = Join-Path $projectRoot '.cloudflared\config.yml'
 
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 
@@ -26,21 +29,39 @@ function Test-FastApiHealth {
     }
 }
 
-Write-ManagedLog 'FastAPI supervisor started.'
+function Test-CloudflaredRunning {
+    $procs = Get-Process -Name 'cloudflared' -ErrorAction SilentlyContinue
+    return ($procs -ne $null -and $procs.Count -gt 0)
+}
+
+function Start-FastApiProcess {
+    Write-ManagedLog 'Starting FastAPI process (uvicorn)...'
+    $args = @('-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', '8000')
+    Start-Process -FilePath $python -ArgumentList $args -WorkingDirectory $backendRoot -WindowStyle Hidden
+}
+
+function Start-CloudflaredProcess {
+    if ((Test-Path -LiteralPath $cloudflared) -and (Test-Path -LiteralPath $tunnelConfig)) {
+        Write-ManagedLog 'Starting Cloudflare Tunnel (sic-fastapi)...'
+        $args = @('tunnel', '--config', $tunnelConfig, 'run', 'sic-fastapi')
+        Start-Process -FilePath $cloudflared -ArgumentList $args -WorkingDirectory $projectRoot -WindowStyle Hidden
+    }
+}
+
+Write-ManagedLog 'FastAPI & Cloudflare Tunnel 24/7 supervisor started.'
 
 while ($true) {
-    if (Test-FastApiHealth) {
-        Start-Sleep -Seconds $HealthIntervalSeconds
-        continue
+    if (-not (Test-FastApiHealth)) {
+        Write-ManagedLog 'FastAPI is offline or unresponsive. Initiating launch...'
+        Start-FastApiProcess
+        Start-Sleep -Seconds $RestartDelaySeconds
     }
 
-    Write-ManagedLog 'FastAPI is offline. Starting the backend.'
-    try {
-        & $runner 2>&1 | Out-File -FilePath $logFile -Append -Encoding utf8
-    } catch {
-        Write-ManagedLog "Backend launch failed: $($_.Exception.Message)"
+    if (-not (Test-CloudflaredRunning)) {
+        Write-ManagedLog 'Cloudflare Tunnel is not running. Starting tunnel...'
+        Start-CloudflaredProcess
+        Start-Sleep -Seconds 3
     }
 
-    Write-ManagedLog "Backend stopped. Retrying in $RestartDelaySeconds seconds."
-    Start-Sleep -Seconds $RestartDelaySeconds
+    Start-Sleep -Seconds $HealthIntervalSeconds
 }

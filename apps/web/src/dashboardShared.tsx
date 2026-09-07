@@ -2,7 +2,7 @@ import type { Copy } from './i18n';
 
 export type Tab = 'overview' | 'attendance' | 'users' | 'unknown' | 'devices' | 'admin';
 export type AttendanceRange = 'today' | 'yesterday' | 'week' | 'custom';
-export type Toast = { id: number; message: string; type: 'success' | 'info' | 'error' };
+export type Toast = { id: number; message: string; type: 'success' | 'info' | 'warning' | 'error' };
 
 export function tabLabel(copy: Copy, tab: Tab) {
   return copy.nav[tab];
@@ -40,3 +40,14 @@ export function apiActionError(error: unknown, fallback: string, copy: Copy) {
 export function Skeleton({ rows = 4 }: { rows?: number }) {
   return <div className="skeleton-list" aria-hidden="true">{Array.from({ length: rows }, (_, index) => <span key={index} />)}</div>;
 }
+
+export function exportAttendanceCsv(entries: { name: string; user_id: string; camera_id: string; timestamp?: { toDate: () => Date } }[], copy: Copy, date: string, onNotify?: (msg: string) => void) {
+  const csv = `${copy.attendance.person},${copy.users.userId},${copy.common.camera},${copy.common.time}\n` + entries.map(row => [row.name, row.user_id, row.camera_id, asDate(row.timestamp, copy)].map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+  link.download = `attendance-${date}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  if (onNotify) onNotify(copy.attendance.exported);
+}
+

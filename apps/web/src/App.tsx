@@ -25,15 +25,19 @@ import {
 } from 'firebase/firestore';
 import { checkApiHealth, getUsers } from './api';
 import DatePicker from './DatePicker';
-import { asDate, Skeleton, tabLabel, timestampMillis, type AttendanceRange, type Tab, type Toast } from './dashboardShared';
+import { asDate, exportAttendanceCsv, Skeleton, tabLabel, timestampMillis, type AttendanceRange, type Tab, type Toast } from './dashboardShared';
+import PersonalizedBentoDashboard from './components/PersonalizedBentoDashboard';
 import { auth, db } from './firebase';
 import { translations, type Copy, type Language } from './i18n';
 import { createMockData, localIsoDate, offsetIsoDate, startOfCurrentWeek } from './mockData';
 import './connection-status.css';
 import './qol.css';
+import './bento-dashboard.css';
 import type { Attendance, Camera, ManagedUser, UnknownEvent, UserSession } from './types';
 
 type Theme = 'dark' | 'light';
+type ThemeSetting = 'dark' | 'light';
+type LayoutMode = 'bento' | 'classic';
 type AuthMode = 'sign-in' | 'sign-up' | 'reset';
 type LoadingState = { attendance: boolean; unknown: boolean; cameras: boolean; users: boolean };
 
@@ -88,22 +92,118 @@ function LiveClock({ use24Hour, showSeconds, copy }: { use24Hour: boolean; showS
   return <div className="live-clock" aria-label={`${copy.common.time}: ${time}`}><strong>{time}</strong><span>{date}</span></div>;
 }
 
-function LegalFooter({ copy }: { copy: Copy }) {
-  return <footer className="legal-footer"><a href="/privacy.html">{copy.legal.privacy}</a></footer>;
+function LegalFooter({ copy, onOpenPrivacy }: { copy: Copy; onOpenPrivacy?: () => void }) {
+  return (
+    <footer className="legal-footer">
+      <div className="legal-footer-inner">
+        <span className="legal-copy">© {new Date().getFullYear()} SIC Smart Attendance</span>
+        <span className="legal-sep" aria-hidden="true">·</span>
+        {onOpenPrivacy ? (
+          <button type="button" className="legal-link-btn" onClick={onOpenPrivacy}>
+            <span className="legal-icon" aria-hidden="true">🛡</span>
+            <span>{copy.legal.privacy}</span>
+          </button>
+        ) : (
+          <a href="/privacy.html" className="legal-link-btn">
+            <span className="legal-icon" aria-hidden="true">🛡</span>
+            <span>{copy.legal.privacy}</span>
+          </a>
+        )}
+      </div>
+    </footer>
+  );
 }
 
-function SettingsDialog({ copy, language, theme, use24Hour, showSeconds, demoMode, onLanguage, onTheme, onUse24Hour, onShowSeconds, onDemoMode, onSignOut, onClose }: {
+function PrivacyDialog({ copy, onClose }: { copy: Copy; onClose: () => void }) {
+  return (
+    <div className="privacy-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}>
+      <section className="privacy-dialog" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
+        <div className="privacy-header">
+          <div className="privacy-header-text">
+            <span className="privacy-badge">
+              <span className="privacy-shield-icon" aria-hidden="true">🛡</span>
+              {copy.legal.privacyDialogEyebrow}
+            </span>
+            <h2 id="privacy-title">{copy.legal.privacyDialogTitle}</h2>
+            <p className="privacy-updated">{copy.legal.privacyLastUpdated}</p>
+          </div>
+          <button className="settings-close" onClick={onClose} aria-label={copy.common.close}>×</button>
+        </div>
+
+        <div className="privacy-body">
+          <div className="privacy-card">
+            <div className="privacy-card-header">
+              <span className="privacy-card-num">01</span>
+              <h3>{copy.legal.privacySection1Title}</h3>
+            </div>
+            <p>{copy.legal.privacySection1Text}</p>
+          </div>
+
+          <div className="privacy-card">
+            <div className="privacy-card-header">
+              <span className="privacy-card-num">02</span>
+              <h3>{copy.legal.privacySection2Title}</h3>
+            </div>
+            <p>{copy.legal.privacySection2Text}</p>
+          </div>
+
+          <div className="privacy-card">
+            <div className="privacy-card-header">
+              <span className="privacy-card-num">03</span>
+              <h3>{copy.legal.privacySection3Title}</h3>
+            </div>
+            <p>{copy.legal.privacySection3Text}</p>
+          </div>
+
+          <div className="privacy-card">
+            <div className="privacy-card-header">
+              <span className="privacy-card-num">04</span>
+              <h3>{copy.legal.privacySection4Title}</h3>
+            </div>
+            <p>{copy.legal.privacySection4Text}</p>
+          </div>
+
+          <div className="privacy-card">
+            <div className="privacy-card-header">
+              <span className="privacy-card-num">05</span>
+              <h3>{copy.legal.privacySection5Title}</h3>
+            </div>
+            <p>{copy.legal.privacySection5Text}</p>
+          </div>
+        </div>
+
+        <div className="privacy-footer">
+          <a href="/privacy.html" target="_blank" rel="noreferrer" className="privacy-external-link">
+            <span>{copy.legal.privacyViewFullDoc}</span>
+            <span aria-hidden="true">↗</span>
+          </a>
+          <button type="button" className="privacy-close-btn" onClick={onClose}>
+            {copy.legal.privacyClose}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SettingsDialog({ copy, language, themeSetting, layoutMode, use24Hour, showSeconds, demoMode, user, username, userPfp, onLanguage, onThemeSetting, onLayoutMode, onUse24Hour, onShowSeconds, onDemoMode, onUpdateAvatar, onSignOut, onClose }: {
   copy: Copy;
   language: Language;
-  theme: Theme;
+  themeSetting: ThemeSetting;
+  layoutMode: LayoutMode;
   use24Hour: boolean;
   showSeconds: boolean;
   demoMode: boolean;
+  user?: User | null;
+  username?: string;
+  userPfp?: string | null;
   onLanguage: (value: Language) => void;
-  onTheme: (value: Theme) => void;
+  onThemeSetting: (value: ThemeSetting) => void;
+  onLayoutMode: (value: LayoutMode) => void;
   onUse24Hour: (value: boolean) => void;
   onShowSeconds: (value: boolean) => void;
   onDemoMode: (value: boolean) => void;
+  onUpdateAvatar?: (dataUrl: string | null) => void;
   onSignOut?: () => void;
   onClose: () => void;
 }) {
@@ -113,11 +213,79 @@ function SettingsDialog({ copy, language, theme, use24Hour, showSeconds, demoMod
         <div><p className="eyebrow">{copy.settings.eyebrow}</p><h2 id="settings-title">{copy.settings.title}</h2></div>
         <button className="settings-close" onClick={onClose} aria-label={copy.common.close}>×</button>
       </div>
+      {user && onUpdateAvatar && (
+        <div className="pfp-setting">
+          <strong>{copy.settings.pfp}</strong><small>{copy.settings.pfpHint}</small>
+          <div className="pfp-row">
+            <div className="pfp-preview">
+              {userPfp ? (
+                <img src={userPfp} alt="" className="pfp-preview-img" />
+              ) : (
+                <span className="pfp-initials">
+                  {((username || user.displayName || user.email || 'U').slice(0, 2)).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="pfp-actions">
+              <label className="pfp-upload-label">
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={event => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                      const img = new Image();
+                      img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const size = 128;
+                        canvas.width = size;
+                        canvas.height = size;
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                          const minDim = Math.min(img.width, img.height);
+                          const sx = (img.width - minDim) / 2;
+                          const sy = (img.height - minDim) / 2;
+                          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+                          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                          onUpdateAvatar(dataUrl);
+                        }
+                      };
+                      img.src = e.target?.result as string;
+                    };
+                    reader.readAsDataURL(file);
+                    event.target.value = '';
+                  }}
+                />
+                <span className="pfp-btn primary">{copy.settings.pfpChange}</span>
+              </label>
+              {userPfp && (
+                <button
+                  type="button"
+                  className="pfp-btn secondary"
+                  onClick={() => onUpdateAvatar(null)}
+                >
+                  {copy.settings.pfpRemove}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className="theme-setting">
         <strong>{copy.settings.appearance}</strong><small>{copy.settings.appearanceHint}</small>
         <div className="theme-options" role="group" aria-label={copy.settings.colorTheme}>
-          <button className={theme === 'dark' ? 'theme-option active' : 'theme-option'} onClick={() => onTheme('dark')} aria-pressed={theme === 'dark'}><span aria-hidden="true">☾</span>{copy.settings.dark}</button>
-          <button className={theme === 'light' ? 'theme-option active' : 'theme-option'} onClick={() => onTheme('light')} aria-pressed={theme === 'light'}><span aria-hidden="true">☀</span>{copy.settings.light}</button>
+          <button className={themeSetting === 'dark' ? 'theme-option active' : 'theme-option'} onClick={() => onThemeSetting('dark')} aria-pressed={themeSetting === 'dark'}><span aria-hidden="true">☾</span>{copy.settings.dark}</button>
+          <button className={themeSetting === 'light' ? 'theme-option active' : 'theme-option'} onClick={() => onThemeSetting('light')} aria-pressed={themeSetting === 'light'}><span aria-hidden="true">☀</span>{copy.settings.light}</button>
+        </div>
+      </div>
+      <div className="theme-setting">
+        <strong>{copy.settings.layoutMode}</strong><small>{copy.settings.layoutModeHint}</small>
+        <div className="theme-options" role="group" aria-label={copy.settings.layoutMode}>
+          <button className={layoutMode === 'bento' ? 'theme-option active' : 'theme-option'} onClick={() => onLayoutMode('bento')} aria-pressed={layoutMode === 'bento'}><span aria-hidden="true">⚡</span>{copy.settings.layoutBento}</button>
+          <button className={layoutMode === 'classic' ? 'theme-option active' : 'theme-option'} onClick={() => onLayoutMode('classic')} aria-pressed={layoutMode === 'classic'}><span aria-hidden="true">↩</span>{copy.settings.layoutClassic}</button>
         </div>
       </div>
       <div className="language-setting">
@@ -136,15 +304,17 @@ function SettingsDialog({ copy, language, theme, use24Hour, showSeconds, demoMod
   </div>;
 }
 
-function Login({ copy, language, theme, use24Hour, showSeconds, demoMode, onLanguage, onTheme, onUse24Hour, onShowSeconds, onDemoMode, onRegistrationState }: {
+function Login({ copy, language, themeSetting, layoutMode, use24Hour, showSeconds, demoMode, onLanguage, onThemeSetting, onLayoutMode, onUse24Hour, onShowSeconds, onDemoMode, onRegistrationState }: {
   copy: Copy;
   language: Language;
-  theme: Theme;
+  themeSetting: ThemeSetting;
+  layoutMode: LayoutMode;
   use24Hour: boolean;
   showSeconds: boolean;
   demoMode: boolean;
   onLanguage: (value: Language) => void;
-  onTheme: (value: Theme) => void;
+  onThemeSetting: (value: ThemeSetting) => void;
+  onLayoutMode: (value: LayoutMode) => void;
   onUse24Hour: (value: boolean) => void;
   onShowSeconds: (value: boolean) => void;
   onDemoMode: (value: boolean) => void;
@@ -152,6 +322,8 @@ function Login({ copy, language, theme, use24Hour, showSeconds, demoMode, onLang
 }) {
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [showPass, setShowPass] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -249,18 +421,324 @@ function Login({ copy, language, theme, use24Hour, showSeconds, demoMode, onLang
   }
 
   const cardClass = `login-card${signingIn ? ' signing-in' : ''}${mode === 'sign-up' ? ' signup-card' : ''}`;
-  return <main className="login-shell">
-    <div className="auth-corner-tools"><LiveClock use24Hour={use24Hour} showSeconds={showSeconds} copy={copy} /><button className="auth-settings-button" onClick={() => setSettingsOpen(true)} aria-label={copy.auth.openSettings}>⚙</button></div>
-    <section className={cardClass}>
-      <p className="eyebrow">{copy.auth.system}</p>
-      {mode !== 'reset' && <div className="auth-tabs" data-mode={mode} role="tablist" aria-label={copy.auth.access}><button type="button" role="tab" aria-selected={mode === 'sign-in'} className={mode === 'sign-in' ? 'active' : ''} onClick={() => showMode('sign-in')}>{copy.auth.signIn}</button><button type="button" role="tab" aria-selected={mode === 'sign-up'} className={mode === 'sign-up' ? 'active' : ''} onClick={() => showMode('sign-up')}>{copy.auth.signUp}</button></div>}
-      {mode === 'sign-in' && <div className="auth-view"><h1>{copy.auth.welcomeBack}</h1><p className="muted">{copy.auth.signInHint}</p><form onSubmit={submitSignIn}><label>{copy.auth.email}<input value={email} type="email" onChange={event => setEmail(event.target.value)} disabled={signingIn} autoComplete="email" required /></label><label>{copy.auth.password}<input value={password} type="password" onChange={event => setPassword(event.target.value)} disabled={signingIn} autoComplete="current-password" required /></label><button disabled={signingIn}>{signingIn ? <span className="signing-label"><i className="login-spinner" aria-hidden="true" />{copy.auth.signingIn}</span> : copy.auth.signIn}</button><button type="button" className="text-button auth-link" disabled={signingIn} onClick={() => showMode('reset')}>{copy.auth.forgot}</button>{message && <div className={`auth-notice ${messageType}`} role="alert">{message}</div>}</form></div>}
-      {mode === 'sign-up' && <div className="auth-view"><h1>{copy.auth.welcome}</h1><p className="muted">{copy.auth.signUpHint}</p><form onSubmit={submitSignUp}><label>{copy.auth.username}<input value={username} onChange={event => setUsername(event.target.value)} minLength={3} maxLength={24} pattern="[A-Za-z0-9_]+" autoComplete="username" required /></label><DatePicker label={copy.auth.dob} value={dateOfBirth} onChange={setDateOfBirth} max={today()} defaultViewYear={new Date().getFullYear() - 18} yearStart={new Date().getFullYear() - 100} yearEnd={new Date().getFullYear()} showToday={false} language={language} /><label>{copy.auth.email}<input value={email} type="email" onChange={event => setEmail(event.target.value)} autoComplete="email" required /></label><div className="signup-passwords"><label>{copy.auth.password}<input value={password} type="password" minLength={6} onChange={event => setPassword(event.target.value)} autoComplete="new-password" required /></label><label>{copy.auth.confirmPassword}<input value={confirmPassword} type="password" minLength={6} onChange={event => setConfirmPassword(event.target.value)} autoComplete="new-password" required /></label></div><button disabled={creating}>{creating ? copy.auth.creating : copy.auth.create}</button><small className="signup-help">{copy.auth.signUpHelp}</small>{message && <div className={`auth-notice ${messageType}`} role="alert">{message}</div>}</form></div>}
-      {mode === 'reset' && <div className="auth-view"><h1>{copy.auth.resetTitle}</h1><p className="muted">{copy.auth.resetHint}</p><form onSubmit={submitReset}><label>{copy.auth.email}<input value={email} type="email" onChange={event => setEmail(event.target.value)} autoFocus required /></label><button disabled={resetting}>{resetting ? copy.auth.sendingReset : copy.auth.sendReset}</button><button type="button" className="text-button auth-link" onClick={() => showMode('sign-in')}>{copy.auth.back}</button>{message && <div className={`auth-notice ${messageType}`} role="status">{message}</div>}</form></div>}
-    </section>
-    <LegalFooter copy={copy} />
-    {settingsOpen && <SettingsDialog copy={copy} language={language} theme={theme} use24Hour={use24Hour} showSeconds={showSeconds} demoMode={demoMode} onLanguage={onLanguage} onTheme={onTheme} onUse24Hour={onUse24Hour} onShowSeconds={onShowSeconds} onDemoMode={onDemoMode} onClose={() => setSettingsOpen(false)} />}
-  </main>;
+  return (
+    <main className="login-shell">
+      <div className="auth-corner-tools">
+        <LiveClock use24Hour={use24Hour} showSeconds={showSeconds} copy={copy} />
+        <button className="auth-settings-button" onClick={() => setSettingsOpen(true)} aria-label={copy.auth.openSettings}>⚙</button>
+      </div>
+
+      <div className="login-stage">
+        <section className="login-hero-showcase">
+          <div className="hero-brand-badge">
+            <div className="hero-logo-icon">
+              <span className="hero-hex-icon" aria-hidden="true">⬡</span>
+            </div>
+            <div className="hero-brand-meta">
+              <span className="hero-product-name">SIC SMART ATTENDANCE</span>
+              <span className="hero-version-pill">{copy.auth.badgeEnterprise}</span>
+            </div>
+          </div>
+
+          <div className="hero-headline-block">
+            <h1 className="hero-main-title">{copy.auth.heroTitle}</h1>
+            <p className="hero-main-subtitle">{copy.auth.heroSubtitle}</p>
+          </div>
+
+          <div className="hero-stats-grid">
+            <div className="hero-stat-card">
+              <div className="stat-card-icon">📹</div>
+              <div className="stat-card-text">
+                <strong>{copy.auth.featureMultiCam}</strong>
+                <span>Camera 1 · Camera 2 · Camera 3</span>
+              </div>
+              <span className="stat-pulse-dot" title="Active stream">●</span>
+            </div>
+
+            <div className="hero-stat-card">
+              <div className="stat-card-icon">⚡</div>
+              <div className="stat-card-text">
+                <strong>{copy.auth.featureSpeed}</strong>
+                <span>buffalo_sc · MBF ONNX</span>
+              </div>
+            </div>
+
+            <div className="hero-stat-card">
+              <div className="stat-card-icon">🛡</div>
+              <div className="stat-card-text">
+                <strong>{copy.auth.featureSecurity}</strong>
+                <span>Zero raw photo storage</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="hero-quote-card">
+            <p className="hero-quote-text">"{copy.auth.featureTagline}"</p>
+          </div>
+        </section>
+
+        <div className="login-form-wrapper">
+          <section className={cardClass}>
+            <div className="login-card-header">
+              <p className="eyebrow">{copy.auth.system}</p>
+              <span className="login-card-status">
+                <span className="dot good"></span>
+                {copy.common.online}
+              </span>
+            </div>
+
+            {mode !== 'reset' && (
+              <div className="auth-tabs" data-mode={mode} role="tablist" aria-label={copy.auth.access}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'sign-in'}
+                  className={mode === 'sign-in' ? 'active' : ''}
+                  onClick={() => showMode('sign-in')}
+                >
+                  {copy.auth.signIn}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'sign-up'}
+                  className={mode === 'sign-up' ? 'active' : ''}
+                  onClick={() => showMode('sign-up')}
+                >
+                  {copy.auth.signUp}
+                </button>
+              </div>
+            )}
+
+            {mode === 'sign-in' && (
+              <div className="auth-view">
+                <div className="auth-title-group">
+                  <h2 className="auth-main-heading">{copy.auth.welcomeBack}</h2>
+                  <p className="muted">{copy.auth.signInHint}</p>
+                </div>
+                <form onSubmit={submitSignIn} className="auth-form-styled">
+                  <label className="auth-input-label">
+                    <span>{copy.auth.email}</span>
+                    <div className="input-with-icon">
+                      <span className="input-icon" aria-hidden="true">✉</span>
+                      <input
+                        value={email}
+                        type="email"
+                        placeholder="name@example.com"
+                        onChange={event => setEmail(event.target.value)}
+                        disabled={signingIn}
+                        autoComplete="email"
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="auth-input-label">
+                    <div className="label-row-between">
+                      <span>{copy.auth.password}</span>
+                      <button
+                        type="button"
+                        className="text-button auth-link-inline"
+                        disabled={signingIn}
+                        onClick={() => showMode('reset')}
+                      >
+                        {copy.auth.forgot}
+                      </button>
+                    </div>
+                    <div className="input-with-icon">
+                      <span className="input-icon" aria-hidden="true">🔒</span>
+                      <input
+                        value={password}
+                        type={showPass ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        onChange={event => setPassword(event.target.value)}
+                        disabled={signingIn}
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="pass-visibility-btn"
+                        onClick={() => setShowPass(s => !s)}
+                        title={showPass ? copy.auth.hidePassword : copy.auth.showPassword}
+                        tabIndex={-1}
+                      >
+                        {showPass ? '👁‍🗨' : '👁'}
+                      </button>
+                    </div>
+                  </label>
+
+                  <button type="submit" className="auth-submit-btn" disabled={signingIn}>
+                    {signingIn ? (
+                      <span className="signing-label">
+                        <i className="login-spinner" aria-hidden="true" />
+                        {copy.auth.signingIn}
+                      </span>
+                    ) : (
+                      copy.auth.signIn
+                    )}
+                  </button>
+
+                  {message && <div className={`auth-notice ${messageType}`} role="alert">{message}</div>}
+                </form>
+              </div>
+            )}
+
+            {mode === 'sign-up' && (
+              <div className="auth-view">
+                <div className="auth-title-group">
+                  <h2 className="auth-main-heading">{copy.auth.welcome}</h2>
+                  <p className="muted">{copy.auth.signUpHint}</p>
+                </div>
+                <form onSubmit={submitSignUp} className="auth-form-styled">
+                  <label className="auth-input-label">
+                    <span>{copy.auth.username}</span>
+                    <div className="input-with-icon">
+                      <span className="input-icon" aria-hidden="true">👤</span>
+                      <input
+                        value={username}
+                        placeholder="username"
+                        onChange={event => setUsername(event.target.value)}
+                        minLength={3}
+                        maxLength={24}
+                        pattern="[A-Za-z0-9_]+"
+                        autoComplete="username"
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <DatePicker
+                    label={copy.auth.dob}
+                    value={dateOfBirth}
+                    onChange={setDateOfBirth}
+                    max={today()}
+                    defaultViewYear={new Date().getFullYear() - 18}
+                    yearStart={new Date().getFullYear() - 100}
+                    yearEnd={new Date().getFullYear()}
+                    showToday={false}
+                    language={language}
+                  />
+
+                  <label className="auth-input-label">
+                    <span>{copy.auth.email}</span>
+                    <div className="input-with-icon">
+                      <span className="input-icon" aria-hidden="true">✉</span>
+                      <input
+                        value={email}
+                        type="email"
+                        placeholder="name@example.com"
+                        onChange={event => setEmail(event.target.value)}
+                        autoComplete="email"
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <div className="signup-passwords">
+                    <label className="auth-input-label">
+                      <span>{copy.auth.password}</span>
+                      <div className="input-with-icon">
+                        <span className="input-icon" aria-hidden="true">🔒</span>
+                        <input
+                          value={password}
+                          type={showPass ? 'text' : 'password'}
+                          minLength={6}
+                          placeholder="••••••"
+                          onChange={event => setPassword(event.target.value)}
+                          autoComplete="new-password"
+                          required
+                        />
+                      </div>
+                    </label>
+                    <label className="auth-input-label">
+                      <span>{copy.auth.confirmPassword}</span>
+                      <div className="input-with-icon">
+                        <span className="input-icon" aria-hidden="true">🔒</span>
+                        <input
+                          value={confirmPassword}
+                          type={showPass ? 'text' : 'password'}
+                          minLength={6}
+                          placeholder="••••••"
+                          onChange={event => setConfirmPassword(event.target.value)}
+                          autoComplete="new-password"
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <button type="submit" className="auth-submit-btn" disabled={creating}>
+                    {creating ? copy.auth.creating : copy.auth.create}
+                  </button>
+
+                  <small className="signup-help">{copy.auth.signUpHelp}</small>
+                  {message && <div className={`auth-notice ${messageType}`} role="alert">{message}</div>}
+                </form>
+              </div>
+            )}
+
+            {mode === 'reset' && (
+              <div className="auth-view">
+                <div className="auth-title-group">
+                  <h2 className="auth-main-heading">{copy.auth.resetTitle}</h2>
+                  <p className="muted">{copy.auth.resetHint}</p>
+                </div>
+                <form onSubmit={submitReset} className="auth-form-styled">
+                  <label className="auth-input-label">
+                    <span>{copy.auth.email}</span>
+                    <div className="input-with-icon">
+                      <span className="input-icon" aria-hidden="true">✉</span>
+                      <input
+                        value={email}
+                        type="email"
+                        placeholder="name@example.com"
+                        onChange={event => setEmail(event.target.value)}
+                        autoFocus
+                        required
+                      />
+                    </div>
+                  </label>
+                  <button type="submit" className="auth-submit-btn" disabled={resetting}>
+                    {resetting ? copy.auth.sendingReset : copy.auth.sendReset}
+                  </button>
+                  <button type="button" className="text-button auth-link" onClick={() => showMode('sign-in')}>
+                    {copy.auth.back}
+                  </button>
+                  {message && <div className={`auth-notice ${messageType}`} role="status">{message}</div>}
+                </form>
+              </div>
+            )}
+          </section>
+
+          <LegalFooter copy={copy} onOpenPrivacy={() => setPrivacyOpen(true)} />
+        </div>
+      </div>
+
+      {settingsOpen && (
+        <SettingsDialog
+          copy={copy}
+          language={language}
+          themeSetting={themeSetting}
+          layoutMode={layoutMode}
+          use24Hour={use24Hour}
+          showSeconds={showSeconds}
+          demoMode={demoMode}
+          onLanguage={onLanguage}
+          onThemeSetting={onThemeSetting}
+          onLayoutMode={onLayoutMode}
+          onUse24Hour={onUse24Hour}
+          onShowSeconds={onShowSeconds}
+          onDemoMode={onDemoMode}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {privacyOpen && (
+        <PrivacyDialog copy={copy} onClose={() => setPrivacyOpen(false)} />
+      )}
+    </main>
+  );
 }
 
 function App() {
@@ -281,16 +759,43 @@ function App() {
   const [date, setDate] = useState(today());
   const [attendanceRange, setAttendanceRange] = useState<AttendanceRange>('today');
   const [search, setSearch] = useState('');
+  const [cameraFilter, setCameraFilter] = useState<string>('all');
   const [error, setError] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const [theme, setTheme] = useState<Theme>(() => localStorage.getItem('smartattend-theme') === 'light' ? 'light' : 'dark');
+  const [themeSetting, setThemeSetting] = useState<ThemeSetting>(() => {
+    const saved = localStorage.getItem('smartattend-theme-setting');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return 'dark';
+  });
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => (localStorage.getItem('smartattend-layout-mode') as LayoutMode) || 'bento');
+  const resolvedTheme: Theme = themeSetting;
+
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('smartattend-language') === 'vi' ? 'vi' : 'en');
   const [demoMode, setDemoMode] = useState(() => localStorage.getItem('smartattend-demo') === 'true');
   const [use24Hour, setUse24Hour] = useState(() => localStorage.getItem('smartattend-clock-24') === 'true');
   const [showSeconds, setShowSeconds] = useState(() => localStorage.getItem('smartattend-clock-seconds') === 'true');
+  const [userPfp, setUserPfp] = useState<string | null>(() => {
+    const savedUid = user?.uid;
+    if (savedUid) {
+      return localStorage.getItem(`smartattend-pfp-${savedUid}`) || user?.photoURL || null;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (user) {
+      const saved = localStorage.getItem(`smartattend-pfp-${user.uid}`) || user.photoURL || null;
+      setUserPfp(saved);
+    } else {
+      setUserPfp(null);
+    }
+  }, [user]);
+
   const copy = translations[language];
+
   const mock = useMemo(() => createMockData(language), [language]);
   const visibleTabs = useMemo(() => isAdmin ? tabs : tabs.filter(key => key !== 'users' && key !== 'unknown' && key !== 'admin'), [isAdmin]);
   const notify = useCallback((message: string, type: Toast['type'] = 'success') => {
@@ -298,6 +803,65 @@ function App() {
     setToasts(current => [...current, { id, message, type }]);
     window.setTimeout(() => setToasts(current => current.filter(toast => toast.id !== id)), 3200);
   }, []);
+
+  const handleUpdateAvatar = useCallback((dataUrl: string | null) => {
+    if (!user) return;
+    if (dataUrl) {
+      try {
+        localStorage.setItem(`smartattend-pfp-${user.uid}`, dataUrl);
+      } catch {
+        // quota safety
+      }
+      setUserPfp(dataUrl);
+      if (auth.currentUser) {
+        updateProfile(auth.currentUser, { photoURL: dataUrl.length <= 2000 ? dataUrl : undefined }).catch(() => {});
+      }
+      notify(copy.settings.pfpUpdated, 'success');
+    } else {
+      try {
+        localStorage.removeItem(`smartattend-pfp-${user.uid}`);
+      } catch {
+        // safety
+      }
+      setUserPfp(null);
+      if (auth.currentUser) {
+        updateProfile(auth.currentUser, { photoURL: '' }).catch(() => {});
+      }
+      notify(copy.settings.pfpRemoved, 'info');
+    }
+  }, [user, copy.settings.pfpUpdated, copy.settings.pfpRemoved, notify]);
+
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const handleResendVerification = useCallback(async () => {
+    if (!user) return;
+    setResendingEmail(true);
+    try {
+      await user.reload();
+      if (auth.currentUser?.emailVerified) {
+        setUser(auth.currentUser);
+        notify('Email is now verified!', 'success');
+        return;
+      }
+      await sendEmailVerification(user);
+      notify('Verification email sent!', 'success');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to send verification email', 'error');
+    } finally {
+      setResendingEmail(false);
+    }
+  }, [user, notify]);
+
+  useEffect(() => {
+    if (!user || user.emailVerified) return;
+    const checkVerified = async () => {
+      await user.reload().catch(() => undefined);
+      if (auth.currentUser?.emailVerified) {
+        setUser(auth.currentUser);
+      }
+    };
+    window.addEventListener('focus', checkVerified);
+    return () => window.removeEventListener('focus', checkVerified);
+  }, [user]);
 
   useEffect(() => onAuthStateChanged(auth, currentUser => {
     if (registering.current) return;
@@ -315,7 +879,7 @@ function App() {
   }, [isAdmin, tab]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || (!user.emailVerified && !isAdmin)) return;
     let active = true;
     const reportPresence = () => {
       if (!active) return;
@@ -336,10 +900,10 @@ function App() {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', reportPresence);
     };
-  }, [user, tab, copy.common.user]);
+  }, [user, isAdmin, tab, copy.common.user]);
 
   useEffect(() => {
-    if (!user || demoMode || (tab !== 'overview' && tab !== 'attendance')) {
+    if (!user || (!user.emailVerified && !isAdmin) || demoMode || (tab !== 'overview' && tab !== 'attendance')) {
       setLoading(current => ({ ...current, attendance: false }));
       return;
     }
@@ -355,7 +919,7 @@ function App() {
       setError(dataError(failure, copy));
       setLoading(current => ({ ...current, attendance: false }));
     });
-  }, [user, demoMode, tab, attendanceRange, date, copy]);
+  }, [user, isAdmin, demoMode, tab, attendanceRange, date, copy]);
 
   useEffect(() => {
     if (!user || !isAdmin || demoMode || (tab !== 'overview' && tab !== 'unknown')) {
@@ -384,7 +948,7 @@ function App() {
   }, [user, isAdmin, tab, copy]);
 
   useEffect(() => {
-    if (!user || demoMode) {
+    if (!user || (!user.emailVerified && !isAdmin) || demoMode) {
       setCamerasLoaded(false);
       setLoading(current => ({ ...current, cameras: false }));
       return;
@@ -400,7 +964,7 @@ function App() {
       setCamerasLoaded(true);
       setLoading(current => ({ ...current, cameras: false }));
     });
-  }, [user, demoMode, copy]);
+  }, [user, isAdmin, demoMode, copy]);
 
   useEffect(() => {
     if (!user) return;
@@ -461,9 +1025,13 @@ function App() {
   useEffect(() => localStorage.setItem('smartattend-demo', String(demoMode)), [demoMode]);
   useEffect(() => localStorage.setItem('smartattend-tab', tab), [tab]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem('smartattend-theme', theme);
-  }, [theme]);
+    document.documentElement.dataset.theme = resolvedTheme;
+    localStorage.setItem('smartattend-theme', resolvedTheme);
+    localStorage.setItem('smartattend-theme-setting', themeSetting);
+  }, [resolvedTheme, themeSetting]);
+  useEffect(() => {
+    localStorage.setItem('smartattend-layout-mode', layoutMode);
+  }, [layoutMode]);
   useEffect(() => {
     document.documentElement.lang = language;
     localStorage.setItem('smartattend-language', language);
@@ -487,9 +1055,14 @@ function App() {
     notify(translations[value].toast.language, 'info');
   }
 
-  function changeTheme(value: Theme) {
-    setTheme(value);
+  function changeThemeSetting(value: ThemeSetting) {
+    setThemeSetting(value);
     notify(copy.toast.theme, 'info');
+  }
+
+  function changeLayoutMode(value: LayoutMode) {
+    setLayoutMode(value);
+    notify(value === 'bento' ? copy.bento.switchToBento : copy.bento.revertToClassic, 'info');
   }
 
   function changeDemoMode(value: boolean) {
@@ -505,57 +1078,264 @@ function App() {
     : cameras.map(camera => ({ ...camera, status: cameraHeartbeatOnline(camera, heartbeatNow) ? 'online' as const : 'offline' as const }));
   const sourceUsers = demoMode ? mock.users : users;
   const deferredSearch = useDeferredValue(search);
-  const filteredAttendance = useMemo(() => sourceAttendance.filter(item => `${item.name} ${item.user_id} ${item.camera_id}`.toLowerCase().includes(deferredSearch.toLowerCase())), [sourceAttendance, deferredSearch]);
+  const filteredAttendance = useMemo(() => sourceAttendance.filter(item => {
+    const matchesSearch = `${item.name} ${item.user_id} ${item.camera_id}`.toLowerCase().includes(deferredSearch.toLowerCase());
+    const matchesCamera = cameraFilter === 'all' || item.camera_id === cameraFilter;
+    return matchesSearch && matchesCamera;
+  }), [sourceAttendance, deferredSearch, cameraFilter]);
   const online = sourceCameras.filter(camera => camera.status === 'online').length;
-  const settings = <SettingsDialog copy={copy} language={language} theme={theme} use24Hour={use24Hour} showSeconds={showSeconds} demoMode={demoMode} onLanguage={changeLanguage} onTheme={changeTheme} onUse24Hour={setUse24Hour} onShowSeconds={setShowSeconds} onDemoMode={changeDemoMode} onSignOut={user ? () => signOut(auth) : undefined} onClose={() => setSettingsOpen(false)} />;
+  const totalCameras = sourceCameras.length > 0 ? sourceCameras.length : 3;
+  const settings = <SettingsDialog copy={copy} language={language} themeSetting={themeSetting} layoutMode={layoutMode} use24Hour={use24Hour} showSeconds={showSeconds} demoMode={demoMode} user={user} username={username} userPfp={userPfp} onLanguage={changeLanguage} onThemeSetting={changeThemeSetting} onLayoutMode={changeLayoutMode} onUse24Hour={setUse24Hour} onShowSeconds={setShowSeconds} onDemoMode={changeDemoMode} onUpdateAvatar={handleUpdateAvatar} onSignOut={user ? () => signOut(auth) : undefined} onClose={() => setSettingsOpen(false)} />;
 
-  if (!user) return <><Login copy={copy} language={language} theme={theme} use24Hour={use24Hour} showSeconds={showSeconds} demoMode={demoMode} onLanguage={changeLanguage} onTheme={changeTheme} onUse24Hour={setUse24Hour} onShowSeconds={setShowSeconds} onDemoMode={changeDemoMode} onRegistrationState={value => { registering.current = value; }} /><ToastViewport toasts={toasts} /></>;
+  if (!user) return <><Login copy={copy} language={language} themeSetting={themeSetting} layoutMode={layoutMode} use24Hour={use24Hour} showSeconds={showSeconds} demoMode={demoMode} onLanguage={changeLanguage} onThemeSetting={changeThemeSetting} onLayoutMode={changeLayoutMode} onUse24Hour={setUse24Hour} onShowSeconds={setShowSeconds} onDemoMode={changeDemoMode} onRegistrationState={value => { registering.current = value; }} /><ToastViewport toasts={toasts} /></>;
 
   return <main className="app-shell">
     <aside className="sidebar">
       <div className="brand"><img className="brand-logo" src="/sic-ai-mark.svg" alt="" /><div><strong>SIC Smart Attendance</strong><small>{copy.dashboard.subtitle}</small></div></div>
-      <button className="menu-button" type="button" aria-label={navigationOpen ? copy.dashboard.closeNav : copy.dashboard.openNav} aria-controls="dashboard-navigation" aria-expanded={navigationOpen} onClick={() => setNavigationOpen(value => !value)}><span /><span /><span /></button>
+      <div className="mobile-header-tools">
+        <button
+          type="button"
+          className="mobile-avatar-btn"
+          onClick={() => { setSettingsOpen(true); setNavigationOpen(false); }}
+          title={copy.settings.pfpChange}
+          aria-label={copy.common.settings}
+        >
+          <div className="mobile-avatar-circle">
+            {userPfp ? (
+              <img src={userPfp} alt="" className="mobile-avatar-img" />
+            ) : (
+              ((username || user.displayName || user.email || 'U').slice(0, 2)).toUpperCase()
+            )}
+          </div>
+          <span className="mobile-avatar-dot" />
+        </button>
+        <button className="menu-button" type="button" aria-label={navigationOpen ? copy.dashboard.closeNav : copy.dashboard.openNav} aria-controls="dashboard-navigation" aria-expanded={navigationOpen} onClick={() => setNavigationOpen(value => !value)}><span /><span /><span /></button>
+      </div>
       <div id="dashboard-navigation" className={navigationOpen ? 'sidebar-drawer open' : 'sidebar-drawer'}>
         <div className="drawer-brand"><img className="drawer-brand-logo" src="/sic-ai-mark.svg" alt="" /><div><strong>SIC Smart Attendance</strong><small>{copy.dashboard.subtitle}</small></div></div>
         <nav>{visibleTabs.map(key => <button key={key} className={tab === key ? 'nav active' : 'nav'} onClick={() => { setTab(key); setNavigationOpen(false); }}>{tabLabel(copy, key)}</button>)}</nav>
-        <div className="sidebar-footer"><div className="sidebar-actions"><span className="user-chip" title={user.email || username}><span aria-hidden="true">●</span>{username || copy.common.user}<em className={isAdmin ? 'role-chip admin' : 'role-chip'}>{isAdmin ? copy.common.administrator : copy.common.viewer}</em></span></div><div className="account"><span>{user.email}</span><button className="text-button" onClick={() => signOut(auth)}>{copy.common.signOut}</button></div></div>
+        <div className="sidebar-footer">
+          <div className="user-profile-widget">
+            <div className="profile-widget-top">
+              <div
+                className="profile-avatar-wrap"
+                onClick={() => { setSettingsOpen(true); setNavigationOpen(false); }}
+                style={{ cursor: 'pointer' }}
+                title={copy.settings.pfpChange}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setSettingsOpen(true); setNavigationOpen(false); } }}
+              >
+                <div className="profile-avatar">
+                  {userPfp ? (
+                    <img src={userPfp} alt="" className="profile-avatar-img" />
+                  ) : (
+                    ((username || user.displayName || user.email || 'U').slice(0, 2)).toUpperCase()
+                  )}
+                </div>
+                <span className="profile-status-dot" title="Active" aria-label="Active" />
+              </div>
+              <div className="profile-details">
+                <div className="profile-name-row">
+                  <strong className="profile-name" title={username || user.displayName || copy.common.user}>
+                    {username || user.displayName || copy.common.user}
+                  </strong>
+                  <span className={`profile-role-badge ${isAdmin ? 'admin' : 'viewer'}`}>
+                    {isAdmin ? copy.common.administrator : copy.common.viewer}
+                  </span>
+                </div>
+                <span className="profile-email" title={user.email || ''}>
+                  {user.email}
+                </span>
+              </div>
+            </div>
+            <div className="profile-widget-actions">
+              <button
+                type="button"
+                className="profile-action-btn"
+                onClick={() => { setSettingsOpen(true); setNavigationOpen(false); }}
+                title={copy.common.settings}
+                aria-label={copy.common.settings}
+              >
+                <span aria-hidden="true">⚙</span>
+                <span>{copy.common.settings}</span>
+              </button>
+              <button
+                type="button"
+                className="profile-action-btn signout-btn"
+                onClick={() => signOut(auth)}
+                title={copy.common.signOut}
+                aria-label={copy.common.signOut}
+              >
+                <span aria-hidden="true">⎋</span>
+                <span>{copy.common.signOut}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </aside>
     {navigationOpen && <button className="mobile-nav-backdrop" aria-label={copy.dashboard.closeNav} onClick={() => setNavigationOpen(false)} />}
     <section className="content">
-      <header><div className="page-title-row"><h1>{tabLabel(copy, tab)}</h1>{demoMode && <span className="demo-chip">{copy.common.demo}</span>}</div><div className="header-tools"><LiveClock use24Hour={use24Hour} showSeconds={showSeconds} copy={copy} /><div className="status camera-status"><i className={online === 2 ? 'dot good' : 'dot warn'} /><span className="camera-status-label">{copy.dashboard.camerasOnline}</span><strong className="camera-count">{online}/2</strong></div></div></header>
+      <header><div className="page-title-row"><h1>{tabLabel(copy, tab)}</h1>{demoMode && <span className="demo-chip">{copy.common.demo}</span>}</div><div className="header-tools"><LiveClock use24Hour={use24Hour} showSeconds={showSeconds} copy={copy} /><div className="status camera-status"><i className={online === totalCameras && totalCameras > 0 ? 'dot good' : online > 0 ? 'dot warn' : 'dot warn'} /><span className="camera-status-label">{copy.dashboard.camerasOnline}</span><strong className="camera-count">{online}/{totalCameras}</strong></div></div></header>
       {demoMode && <div className="demo-banner"><span aria-hidden="true">◆</span><span>{copy.dashboard.demoBanner}</span></div>}
+      {user.emailVerified === false && (
+        <div className="unverified-banner" role="alert">
+          <span>Please verify your email address. A verification link was sent to your email.</span>
+          <button type="button" className="secondary" disabled={resendingEmail} onClick={handleResendVerification}>
+            {resendingEmail ? 'Sending…' : 'Resend Verification Email'}
+          </button>
+        </div>
+      )}
       {error && <div className="notice">{error}<button onClick={() => setError('')} aria-label={copy.common.close}>×</button></div>}
       <div className="tab-stage" key={tab}>
-        {tab === 'overview' && <Overview copy={copy} attendance={sourceAttendance} unknown={sourceUnknown} cameras={sourceCameras} users={sourceUsers} isAdmin={isAdmin} loading={!demoMode && (loading.attendance || loading.cameras || (isAdmin && (loading.unknown || loading.users)))} />}
-        {tab === 'attendance' && <AttendanceView copy={copy} language={language} date={date} setDate={setDate} range={attendanceRange} setRange={setAttendanceRange} search={search} setSearch={setSearch} entries={filteredAttendance} loading={!demoMode && loading.attendance} onNotify={notify} />}
+        {tab === 'overview' && (layoutMode === 'bento'
+          ? <PersonalizedBentoDashboard user={user} username={username} isAdmin={isAdmin} attendance={sourceAttendance} cameras={sourceCameras} unknown={sourceUnknown} users={sourceUsers} copy={copy} language={language} totalCameras={totalCameras} loading={!demoMode && (loading.attendance || loading.cameras || (isAdmin && (loading.unknown || loading.users)))} onNavigateTab={key => setTab(key)} onExportCsv={() => exportAttendanceCsv(sourceAttendance, copy, today(), notify)} onNotify={notify} />
+          : <Overview copy={copy} attendance={sourceAttendance} unknown={sourceUnknown} cameras={sourceCameras} users={sourceUsers} isAdmin={isAdmin} totalCameras={totalCameras} loading={!demoMode && (loading.attendance || loading.cameras || (isAdmin && (loading.unknown || loading.users)))} />
+        )}
+        {tab === 'attendance' && <AttendanceView copy={copy} language={language} date={date} setDate={setDate} range={attendanceRange} setRange={setAttendanceRange} search={search} setSearch={setSearch} cameraFilter={cameraFilter} setCameraFilter={setCameraFilter} cameras={sourceCameras} entries={filteredAttendance} loading={!demoMode && loading.attendance} onNotify={notify} />}
         {isAdmin && tab === 'users' && <Suspense fallback={<Skeleton rows={5} />}><UsersView copy={copy} users={sourceUsers} apiOnline={apiOnline} demoMode={demoMode} loading={!demoMode && loading.users} onRefresh={async () => { await refreshUsers(); notify(copy.users.refreshed, 'info'); }} onChanged={refreshUsers} onError={setError} onNotify={notify} /></Suspense>}
         {isAdmin && tab === 'unknown' && <Suspense fallback={<Skeleton rows={5} />}><UnknownView copy={copy} events={sourceUnknown} loading={!demoMode && loading.unknown} apiOnline={apiOnline === true && !demoMode} demoMode={demoMode} onError={setError} onNotify={notify} /></Suspense>}
         {tab === 'devices' && <DeviceView copy={copy} cameras={sourceCameras} loading={!demoMode && loading.cameras} />}
         {isAdmin && tab === 'admin' && <Suspense fallback={<Skeleton rows={5} />}><AdminView copy={copy} currentUid={user.uid} sessions={sessions} apiOnline={apiOnline === true} onError={setError} onNotify={notify} /></Suspense>}
       </div>
-      <LegalFooter copy={copy} />
+      <LegalFooter copy={copy} onOpenPrivacy={() => setPrivacyOpen(true)} />
     </section>
+
+    {/* Mobile Native-Style Bottom Navigation Bar */}
+    <nav className="mobile-bottom-nav" aria-label="Mobile Bottom Navigation">
+      <button
+        type="button"
+        className={`bottom-nav-item ${tab === 'overview' ? 'active' : ''}`}
+        onClick={() => { setTab('overview'); setNavigationOpen(false); }}
+      >
+        <div className="bottom-nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          </svg>
+        </div>
+        <span>{tabLabel(copy, 'overview')}</span>
+      </button>
+
+      <button
+        type="button"
+        className={`bottom-nav-item ${tab === 'attendance' ? 'active' : ''}`}
+        onClick={() => { setTab('attendance'); setNavigationOpen(false); }}
+      >
+        <div className="bottom-nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+        </div>
+        <span>{tabLabel(copy, 'attendance')}</span>
+      </button>
+
+      <button
+        type="button"
+        className={`bottom-nav-item ${tab === 'devices' ? 'active' : ''}`}
+        onClick={() => { setTab('devices'); setNavigationOpen(false); }}
+      >
+        <div className="bottom-nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M23 7l-7 5 7 5V7z" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+        </div>
+        <span>{tabLabel(copy, 'devices')}</span>
+      </button>
+
+      {isAdmin ? (
+        <button
+          type="button"
+          className={`bottom-nav-item ${tab === 'users' ? 'active' : ''}`}
+          onClick={() => { setTab('users'); setNavigationOpen(false); }}
+        >
+          <div className="bottom-nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
+          <span>{tabLabel(copy, 'users')}</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="bottom-nav-item"
+          onClick={() => { setSettingsOpen(true); setNavigationOpen(false); }}
+        >
+          <div className="bottom-nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </div>
+          <span>{copy.common.settings}</span>
+        </button>
+      )}
+
+      <button
+        type="button"
+        className={`bottom-nav-item ${navigationOpen || (tab === 'unknown' || tab === 'admin') ? 'active' : ''}`}
+        onClick={() => setNavigationOpen(value => !value)}
+        aria-label={navigationOpen ? copy.dashboard.closeNav : copy.dashboard.openNav}
+      >
+        <div className="bottom-nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="4" y1="6" x2="20" y2="6" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="18" x2="20" y2="18" />
+          </svg>
+        </div>
+        <span>{copy.common.menu}</span>
+      </button>
+    </nav>
+
     <button className="floating-settings" type="button" aria-label={copy.common.settings} title={copy.common.settings} onClick={() => { setSettingsOpen(true); setNavigationOpen(false); }}><span aria-hidden="true">⚙</span></button>
     {settingsOpen && settings}
+    {privacyOpen && <PrivacyDialog copy={copy} onClose={() => setPrivacyOpen(false)} />}
     <ToastViewport toasts={toasts} />
   </main>;
 }
 
-function Overview({ copy, attendance, unknown, cameras, users, isAdmin, loading }: { copy: Copy; attendance: Attendance[]; unknown: UnknownEvent[]; cameras: Camera[]; users: ManagedUser[]; isAdmin: boolean; loading: boolean }) {
+function Overview({ copy, attendance, unknown, cameras, users, isAdmin, loading, totalCameras }: { copy: Copy; attendance: Attendance[]; unknown: UnknownEvent[]; cameras: Camera[]; users: ManagedUser[]; isAdmin: boolean; loading: boolean; totalCameras: number }) {
   const publicCards = [
     [copy.overview.recognized, attendance.length, copy.overview.recognizedHint],
-    [copy.overview.cameraHealth, `${cameras.filter(camera => camera.status === 'online').length}/2`, copy.overview.cameraHealthHint],
+    [copy.overview.cameraHealth, `${cameras.filter(camera => camera.status === 'online').length}/${totalCameras}`, copy.overview.cameraHealthHint],
   ];
   const adminCards = [
     [copy.overview.unknown, unknown.length, copy.overview.unknownHint],
     [copy.overview.activeUsers, users.filter(user => user.status === 'active').length, copy.overview.activeUsersHint],
   ];
   const cards = isAdmin ? [publicCards[0], ...adminCards, publicCards[1]] : publicCards;
-  return <><div className={isAdmin ? 'card-grid' : 'card-grid viewer-grid'}>{cards.map(([label, value, hint]) => <article className="metric" key={String(label)}><span>{label}</span><strong>{loading ? '...' : value}</strong><small>{hint}</small></article>)}</div><section className="panel"><div className="panel-title"><div><h2>{copy.overview.todayTitle}</h2><p>{copy.overview.todayHint}</p></div></div><AttendanceRows copy={copy} entries={attendance.slice(0, 8)} loading={loading} /></section></>;
+  return <>
+    <div className={isAdmin ? 'card-grid' : 'card-grid viewer-grid'}>{cards.map(([label, value, hint]) => <article className="metric" key={String(label)}><span>{label}</span><strong>{loading ? '...' : value}</strong><small>{hint}</small></article>)}</div>
+    <section className="panel">
+      <div className="panel-title">
+        <div>
+          <h2>{copy.overview.todayTitle}</h2>
+          <p>{copy.overview.todayHint}</p>
+        </div>
+      </div>
+      <AttendanceRows copy={copy} entries={attendance.slice(0, 10)} loading={loading} />
+    </section>
+  </>;
 }
 
-function AttendanceView({ copy, language, date, setDate, range, setRange, search, setSearch, entries, loading, onNotify }: { copy: Copy; language: Language; date: string; setDate: (value: string) => void; range: AttendanceRange; setRange: (value: AttendanceRange) => void; search: string; setSearch: (value: string) => void; entries: Attendance[]; loading: boolean; onNotify: (message: string, type?: Toast['type']) => void }) {
+function AttendanceView({ copy, language, date, setDate, range, setRange, search, setSearch, cameraFilter, setCameraFilter, cameras, entries, loading, onNotify }: { copy: Copy; language: Language; date: string; setDate: (value: string) => void; range: AttendanceRange; setRange: (value: AttendanceRange) => void; search: string; setSearch: (value: string) => void; cameraFilter: string; setCameraFilter: (value: string) => void; cameras: Camera[]; entries: Attendance[]; loading: boolean; onNotify: (message: string, type?: Toast['type']) => void }) {
+  const availableCameraIds = useMemo(() => {
+    const ids = new Set<string>(['camera-1', 'camera-2', 'camera-3']);
+    cameras.forEach(c => ids.add(c.camera_id || c.id));
+    entries.forEach(e => { if (e.camera_id) ids.add(e.camera_id); });
+    return Array.from(ids).sort();
+  }, [cameras, entries]);
+
   function exportCsv() {
     const csv = `${copy.attendance.person},${copy.users.userId},${copy.common.camera},${copy.common.time}\n` + entries.map(row => [row.name, row.user_id, row.camera_id, asDate(row.timestamp, copy)].map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
     const link = document.createElement('a');
@@ -570,6 +1350,7 @@ function AttendanceView({ copy, language, date, setDate, range, setRange, search
     <div className="quick-filter" role="group" aria-label={copy.attendance.date}>{quickFilters.map(([key, label]) => <button key={key} className={range === key ? 'active' : ''} onClick={() => setRange(key)}>{label}</button>)}</div>
     <div className="toolbar">
       {range === 'custom' && <DatePicker label={copy.attendance.date} value={date} onChange={value => { setDate(value); setRange('custom'); }} yearStart={new Date().getFullYear() - 5} yearEnd={new Date().getFullYear() + 1} language={language} />}
+      <label>{copy.attendance.cameraFilter}<select value={cameraFilter} onChange={event => setCameraFilter(event.target.value)} className="camera-filter-select"><option value="all">{copy.attendance.allCameras}</option>{availableCameraIds.map(id => { const label = id === 'camera-1' ? 'Camera 1' : id === 'camera-2' ? 'Camera 2' : id === 'camera-3' ? 'Camera 3' : id; return <option key={id} value={id}>{label}</option>; })}</select></label>
       <label className="grow">{copy.attendance.search}<div className="search-field"><input placeholder={copy.attendance.searchPlaceholder} value={search} onChange={event => setSearch(event.target.value)} />{search && <button type="button" onClick={() => setSearch('')} aria-label={copy.datePicker.clear}>×</button>}</div></label>
       <span className="record-count">{copy.attendance.showing(entries.length)}</span>
       <button className="secondary" onClick={exportCsv} disabled={!entries.length}>{copy.attendance.export}</button>
@@ -584,8 +1365,17 @@ function AttendanceRows({ copy, entries, loading }: { copy: Copy; entries: Atten
 }
 
 function DeviceView({ copy, cameras, loading }: { copy: Copy; cameras: Camera[]; loading: boolean }) {
-  if (loading) return <div className="device-grid"><section className="panel"><Skeleton rows={4} /></section><section className="panel"><Skeleton rows={4} /></section></div>;
-  return <div className="device-grid">{cameras.map(camera => <section className="panel device" key={camera.id}><div className="device-top"><div className="camera-icon">◉</div><span className={camera.status === 'online' ? 'pill success' : 'pill warning'}>{camera.status === 'online' ? copy.common.online : copy.common.offline}</span></div><h2>{camera.name}</h2><p>{camera.id} · {camera.raspberry_pi_id || copy.devices.piMissing}</p><dl><dt>{copy.devices.heartbeat}</dt><dd>{asDate(camera.last_seen, copy)}</dd>{camera.last_error && <><dt>{copy.devices.lastError}</dt><dd className="danger">{camera.last_error}</dd></>}</dl></section>)}{!cameras.length && <section className="panel"><p className="empty">{copy.devices.empty}</p></section>}</div>;
+  if (loading) return <div className="device-grid"><section className="panel"><Skeleton rows={4} /></section><section className="panel"><Skeleton rows={4} /></section><section className="panel"><Skeleton rows={4} /></section></div>;
+  return <div className="device-grid">{cameras.map((camera, index) => {
+    const displayName = camera.camera_id === 'camera-1' || camera.id === 'camera-1' || index === 0
+      ? 'Camera 1'
+      : camera.camera_id === 'camera-2' || camera.id === 'camera-2' || index === 1
+      ? 'Camera 2'
+      : camera.camera_id === 'camera-3' || camera.id === 'camera-3' || index === 2
+      ? 'Camera 3'
+      : camera.name || `Camera ${index + 1}`;
+    return <section className="panel device" key={camera.id}><div className="device-top"><div className="camera-icon">◉</div><span className={camera.status === 'online' ? 'pill success' : 'pill warning'}>{camera.status === 'online' ? copy.common.online : copy.common.offline}</span></div><h2>{displayName}</h2><p>{camera.id} · {camera.raspberry_pi_id || copy.devices.piMissing}</p><dl>{camera.location && <><dt>{copy.common.location}</dt><dd>{camera.location}</dd></>}<dt>{copy.devices.heartbeat}</dt><dd>{asDate(camera.last_seen, copy)}</dd>{camera.last_error && <><dt>{copy.devices.lastError}</dt><dd className="danger">{camera.last_error}</dd></>}</dl></section>;
+  })}{!cameras.length && <section className="panel"><p className="empty">{copy.devices.empty}</p></section>}</div>;
 }
 
 function ToastViewport({ toasts }: { toasts: Toast[] }) {

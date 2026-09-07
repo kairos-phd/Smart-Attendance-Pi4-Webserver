@@ -4,6 +4,7 @@
 flowchart LR
   C1["Camera 1"] --> E["Raspberry Pi edge service"]
   C2["Camera 2"] --> E
+  C3["Camera 3"] --> E
   E --> M["OpenCV motion monitor"]
   M -->|activity| AI["InsightFace: SCRFD + ArcFace"]
   AI --> P["Attendance processor"]
@@ -26,15 +27,18 @@ Firebase is the selected database/cloud service. The gateway is not a second dat
 
 It may run on the Pi for a LAN demonstration or a small trusted server. The edge service writes directly to Firebase with its own service account because it must continue to queue and synchronize events independently of a dashboard being open.
 
-## Edge behavior
+## Multi-camera Edge behavior (1, 2, or 3 cameras)
 
-Each camera has a lightweight OpenCV frame loop. A background-subtraction motion detector triggers one candidate frame after its own cooldown. A process-wide AI lock permits only one recognition job at a time. For each detected face:
-
-1. create a normalized embedding;
-2. compare it with cached active-user embeddings by cosine similarity;
-3. record a recognized event unless the same person/camera is inside the attendance cooldown;
-4. otherwise create an unknown event and optionally retain its image;
-5. write online or enqueue in local SQLite when Firebase is unavailable.
+The edge service dynamically supports 1, 2, or 3 cameras (`camera-1`, `camera-2`, `camera-3`):
+- Each camera runs in its own dedicated, isolated monitor thread with OpenCV capture and a background-subtraction motion detector.
+- **Dynamic Resilience**: The service runs gracefully whether 1, 2, or all 3 cameras are plugged in or configured. If any camera is missing, unplugged, or encounters a read error, its thread marks the camera as `offline` in Firestore with a diagnostic reason, and enters an asynchronous background retry loop without blocking or crashing the remaining online cameras. When reconnected, it recovers automatically.
+- A short lock timeout permits sequential processing of near-simultaneous triggers from multiple cameras without frame starvation.
+- For each detected face:
+  1. create a normalized embedding;
+  2. compare it with cached active-user embeddings by cosine similarity;
+  3. record a recognized event unless that person has already checked in on that specific camera within the configured cooldown (`camera_id`, `user_id`);
+  4. otherwise create an unknown event and optionally retain its image;
+  5. write online or enqueue in local SQLite when Firebase is unavailable.
 
 The user cache is refreshed periodically. Do not run two copies of the edge process against the same cameras.
 

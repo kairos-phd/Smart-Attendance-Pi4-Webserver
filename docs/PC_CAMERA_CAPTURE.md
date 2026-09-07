@@ -46,6 +46,27 @@ Default behavior:
 - Send a device/camera heartbeat every 10 seconds.
 - Do not store raw frames or images in Firestore.
 
+## Multi-Camera Testing on PC (1, 2, or 3 Cameras)
+
+You can run multiple instances simultaneously in separate PowerShell windows to simulate 1, 2, or 3 cameras:
+
+### Camera 1:
+```powershell
+.\.venv\Scripts\python.exe .\scripts\pc_camera_capture.py --camera-index 0 --camera-id camera-1 --camera-name "Entrance camera"
+```
+
+### Camera 2:
+```powershell
+.\.venv\Scripts\python.exe .\scripts\pc_camera_capture.py --camera-index 1 --camera-id camera-2 --camera-name "Desk camera"
+```
+
+### Camera 3:
+```powershell
+.\.venv\Scripts\python.exe .\scripts\pc_camera_capture.py --camera-index 2 --camera-id camera-3 --camera-name "Exit camera"
+```
+
+Each instance maintains its own OpenCV preview window, heartbeat, and ingestion feed. The dashboard at `https://sic4b.io.vn/` will show the cameras online in real-time (`1/3`, `2/3`, or `3/3`).
+
 ## Useful tuning examples
 
 More sensitive motion selection:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -12,6 +13,19 @@ from .config import CameraConfig, Settings
 from .motion import MotionDetector
 
 LOG = logging.getLogger(__name__)
+
+
+def _open_capture(source: int | str) -> cv2.VideoCapture:
+    """Attempt V4L2 backend on Linux, fallback to default OpenCV backend."""
+    if sys.platform == "linux":
+        try:
+            cap = cv2.VideoCapture(source, cv2.CAP_V4L2)
+            if cap.isOpened():
+                return cap
+            cap.release()
+        except Exception:
+            pass
+    return cv2.VideoCapture(source)
 
 
 class CameraWorker(threading.Thread):
@@ -35,17 +49,28 @@ class CameraWorker(threading.Thread):
 
     def run(self) -> None:
         retry_seconds = 5
+        last_reported_status: str | None = None
+        last_offline_log = 0.0
+
         while not self.stop_event.is_set():
-            cap = cv2.VideoCapture(self.camera.source, cv2.CAP_V4L2)
+            cap = _open_capture(self.camera.source)
             if not cap.isOpened():
+                now = time.monotonic()
                 message = f"Cannot open source {self.camera.source!r}; retrying in {retry_seconds}s"
-                LOG.error("%s: %s", self.camera.camera_id, message)
-                self.on_status(self.camera, "offline", message)
+                if last_reported_status != "offline" or now - last_offline_log >= 60.0:
+                    LOG.warning("%s is offline: %s", self.camera.camera_id, message)
+                    last_offline_log = now
+                if last_reported_status != "offline":
+                    self.on_status(self.camera, "offline", message)
+                    last_reported_status = "offline"
                 self.stop_event.wait(retry_seconds)
                 continue
+
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.settings.frame_width)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.settings.frame_height)
-            self.on_status(self.camera, "online", None)
+            if last_reported_status != "online":
+                self.on_status(self.camera, "online", None)
+                last_reported_status = "online"
             LOG.info("%s is online (%s)", self.camera.camera_id, self.camera.source)
             last_capture = 0.0
             frame_delay = 1 / max(1.0, self.settings.monitor_fps)
@@ -65,8 +90,10 @@ class CameraWorker(threading.Thread):
                     if remaining > 0:
                         self.stop_event.wait(remaining)
             except Exception as exc:  # Reopen physical cameras after a disconnect/read failure.
-                LOG.exception("%s failed", self.camera.camera_id)
-                self.on_status(self.camera, "offline", str(exc))
+                LOG.warning("%s encountered error (%s); retrying in %ds", self.camera.camera_id, exc, retry_seconds)
+                if last_reported_status != "offline":
+                    self.on_status(self.camera, "offline", str(exc))
+                    last_reported_status = "offline"
                 self.stop_event.wait(retry_seconds)
             finally:
                 cap.release()

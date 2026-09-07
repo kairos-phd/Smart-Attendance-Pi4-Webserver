@@ -1,11 +1,11 @@
 # Smart Attendance System
 
-Two-camera, event-triggered attendance with a Raspberry Pi 4 (4 GB) transport and a laptop AI service. The Pi performs lightweight capture/motion sampling and sends selected frames to FastAPI on the laptop. The laptop runs face recognition and writes metadata to Firebase Authentication/Firestore. Firebase Storage is optional.
+Multi-camera (1, 2, or 3 cameras), event-triggered attendance with a Raspberry Pi 4 (4 GB) transport and a laptop AI service. The Pi performs lightweight capture/motion sampling and sends selected frames to FastAPI on the laptop. The laptop runs face recognition and writes metadata to Firebase Authentication/Firestore. Firebase Storage is optional.
 
 ## MVP architecture
 
 ```text
-USB/Pi Camera 1, 2
+USB/Pi Camera 1, 2, 3 (dynamic 1, 2, or 3 active cameras)
         -> Raspberry Pi transport (capture -> motion/sample -> retry queue)
         -> laptop FastAPI (SCRFD + ArcFace -> attendance decision)
         -> Firestore
@@ -14,7 +14,7 @@ USB/Pi Camera 1, 2
 Dashboard registration -> laptop FastAPI -> local dataset + protected face embedding metadata
 ```
 
-The initial practical AI choice is InsightFace `buffalo_sc` on the laptop CPU: its SCRFD detector and ArcFace-style embedding model run through ONNX Runtime. Frames are event-triggered and recognition work must be serialized or bounded so two cameras do not overload the laptop.
+The practical AI choice is InsightFace `buffalo_sc` on the laptop CPU: its SCRFD detector and ArcFace-style embedding model run through ONNX Runtime. Frames are event-triggered and recognition work is serialized with bounded queues so concurrent multi-camera feeds do not overload the service.
 
 ## Repository layout
 

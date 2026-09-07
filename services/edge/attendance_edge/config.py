@@ -26,10 +26,10 @@ class CameraConfig:
 
 @dataclass(frozen=True)
 class Settings:
-    firebase_service_account: Path
+    firebase_service_account: Path | None
     firebase_storage_bucket: str | None
     pi_id: str
-    cameras: tuple[CameraConfig, CameraConfig]
+    cameras: tuple[CameraConfig, ...]
     frame_width: int
     frame_height: int
     monitor_fps: float
@@ -45,22 +45,56 @@ class Settings:
     save_unknown_images: bool
     data_dir: Path
     log_level: str
+    backend_api_url: str | None = None
+    device_api_key: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
+        edge_root = Path(__file__).resolve().parents[1]
+        load_dotenv(edge_root / ".env")
+        load_dotenv(edge_root.parent / "backend" / ".env")
         load_dotenv()
         required = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-        if not required:
-            raise RuntimeError("FIREBASE_SERVICE_ACCOUNT is required; copy .env.example to .env first.")
+        backend_url = os.getenv("BACKEND_API_URL")
+        if not required and not backend_url:
+            raise RuntimeError("Either FIREBASE_SERVICE_ACCOUNT or BACKEND_API_URL is required; copy .env.example to .env first.")
         data_dir = Path(os.getenv("DATA_DIR", "./data")).resolve()
+
+        max_cameras = int(os.getenv("CAMERAS_COUNT", "3"))
+        configured_cameras: list[CameraConfig] = []
+        for index in range(1, max(max_cameras + 1, 4)):
+            cam_id = os.getenv(f"CAMERA_{index}_ID", f"camera-{index}")
+            cam_name = os.getenv(f"CAMERA_{index}_NAME", f"Camera {index}")
+            source_env = os.getenv(f"CAMERA_{index}_SOURCE")
+            enabled_env = os.getenv(f"CAMERA_{index}_ENABLED")
+
+            if source_env is None:
+                if index <= max_cameras:
+                    source_val: int | str = index - 1
+                else:
+                    continue
+            else:
+                source_clean = source_env.strip()
+                if not source_clean or source_clean.lower() in {"none", "disabled", "false"}:
+                    continue
+                source_val = _as_source(source_clean)
+
+            if index > max_cameras:
+                continue
+
+            if enabled_env is not None and not _as_bool(enabled_env, default=True):
+                continue
+
+            configured_cameras.append(CameraConfig(cam_id, cam_name, source_val))
+
+        if not configured_cameras:
+            configured_cameras.append(CameraConfig("camera-1", "Camera 1", 0))
+
         return cls(
-            firebase_service_account=Path(required).expanduser(),
+            firebase_service_account=Path(required).expanduser() if required else None,
             firebase_storage_bucket=os.getenv("FIREBASE_STORAGE_BUCKET") or None,
             pi_id=os.getenv("PI_ID", "pi-classroom-01"),
-            cameras=(
-                CameraConfig(os.getenv("CAMERA_1_ID", "camera-1"), os.getenv("CAMERA_1_NAME", "Camera 1"), _as_source(os.getenv("CAMERA_1_SOURCE", "0"))),
-                CameraConfig(os.getenv("CAMERA_2_ID", "camera-2"), os.getenv("CAMERA_2_NAME", "Camera 2"), _as_source(os.getenv("CAMERA_2_SOURCE", "1"))),
-            ),
+            cameras=tuple(configured_cameras),
             frame_width=int(os.getenv("FRAME_WIDTH", "640")),
             frame_height=int(os.getenv("FRAME_HEIGHT", "480")),
             monitor_fps=float(os.getenv("MONITOR_FPS", "4")),
@@ -76,4 +110,6 @@ class Settings:
             save_unknown_images=_as_bool(os.getenv("SAVE_UNKNOWN_IMAGES"), True),
             data_dir=data_dir,
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
+            backend_api_url=backend_url.rstrip("/") if backend_url else None,
+            device_api_key=os.getenv("DEVICE_API_KEY"),
         )

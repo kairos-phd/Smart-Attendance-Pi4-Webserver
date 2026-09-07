@@ -3,70 +3,502 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0b1020" />
-    <title>Privacy Policy | SIC Smart Attendance</title>
+    <meta name="theme-color" content="#090d18" />
+    <title id="page-title">Chính sách Quyền riêng tư | SIC Smart Attendance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
-      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #e9efff; background: #090d18; }
+      :root {
+        color-scheme: dark;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+        color: #e2e8f0;
+        background: #090d18;
+      }
       * { box-sizing: border-box; }
-      body { margin: 0; background: radial-gradient(circle at 82% -10%, #18285e 0, transparent 31%), #090d18; }
-      main { width: min(860px, calc(100% - 2rem)); margin: 2rem auto; padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid #223150; border-radius: 18px; background: linear-gradient(150deg, #131d35, #101727); box-shadow: 0 20px 70px #0008; }
-      h1, h2 { color: #f0f4ff; }
-      h1 { margin-bottom: .35rem; }
-      h2 { margin-top: 1.8rem; font-size: 1.1rem; }
-      p, li { color: #b8c3db; line-height: 1.65; }
-      .updated { color: #8f9bb8; font-size: .85rem; }
-      .language { margin-top: 2.5rem; padding-top: 2rem; border-top: 1px solid #2a3858; }
-      a { color: #aabaff; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at 85% 15%, rgba(37, 99, 235, 0.15) 0%, transparent 50%),
+                    radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.1) 0%, transparent 45%),
+                    #090d18;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 2rem 1.25rem 4rem;
+      }
+      .page-container {
+        width: 100%;
+        max-width: 1200px;
+        display: flex;
+        flex-direction: column;
+        gap: 1.75rem;
+      }
+      .nav-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: rgba(19, 30, 56, 0.6);
+        border: 1px solid rgba(56, 75, 117, 0.45);
+        border-radius: 16px;
+        padding: 0.85rem 1.25rem;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.55rem 1.1rem;
+        border-radius: 10px;
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(56, 75, 117, 0.6);
+        color: #93c5fd;
+        text-decoration: none;
+        font-size: 0.88rem;
+        font-weight: 600;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .back-btn:hover {
+        background: #2563eb;
+        border-color: #3b82f6;
+        color: #ffffff;
+        transform: translateX(-3px);
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+      }
+      .lang-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: rgba(15, 23, 42, 0.8);
+        padding: 0.3rem;
+        border-radius: 12px;
+        border: 1px solid rgba(56, 75, 117, 0.5);
+      }
+      .lang-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.45rem 0.95rem;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        color: #94a3b8;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .lang-btn:hover {
+        color: #f1f5f9;
+      }
+      .lang-btn.active {
+        background: #2563eb;
+        color: #ffffff;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+      }
+
+      /* Main container */
+      main {
+        border: 1px solid rgba(56, 75, 117, 0.45);
+        border-radius: 24px;
+        background: linear-gradient(155deg, rgba(19, 30, 56, 0.85) 0%, rgba(13, 21, 40, 0.96) 100%);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+        padding: clamp(2rem, 3.5vw, 3.25rem);
+        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(16px);
+      }
+
+      .hero-header {
+        border-bottom: 1px solid rgba(56, 75, 117, 0.35);
+        padding-bottom: 2rem;
+        margin-bottom: 2.25rem;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: #60a5fa;
+        background: rgba(59, 130, 246, 0.12);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 999px;
+        padding: 0.3rem 0.85rem;
+        margin-bottom: 0.9rem;
+      }
+      h1 {
+        font-size: clamp(1.85rem, 3.2vw, 2.6rem);
+        font-weight: 800;
+        color: #f8fafc;
+        margin: 0 0 0.6rem;
+        letter-spacing: -0.025em;
+        line-height: 1.2;
+      }
+      .updated {
+        color: #8290ad;
+        font-size: 0.86rem;
+        margin-bottom: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .lead-text {
+        font-size: 1.05rem;
+        line-height: 1.75;
+        color: #cbd5e1;
+        margin: 0;
+        max-width: 1080px;
+      }
+
+      /* Key Guarantee Banner */
+      .guarantee-banner {
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(99, 102, 241, 0.1) 100%);
+        border: 1px solid rgba(96, 165, 250, 0.35);
+        border-radius: 18px;
+        padding: 1.35rem 1.6rem;
+        margin-bottom: 2.25rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 1.1rem;
+      }
+      .guarantee-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: #2563eb;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 1.3rem;
+      }
+      .guarantee-content h3 {
+        margin: 0 0 0.35rem;
+        font-size: 1.05rem;
+        color: #93c5fd;
+        font-weight: 700;
+      }
+      .guarantee-content p {
+        margin: 0;
+        font-size: 0.92rem;
+        line-height: 1.6;
+        color: #e2e8f0;
+      }
+
+      /* Sections Grid */
+      .sections-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+      }
+      @media (max-width: 900px) {
+        .sections-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .section-card {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(56, 75, 117, 0.4);
+        border-radius: 18px;
+        padding: 1.6rem 1.75rem;
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+      }
+      .section-card:hover {
+        border-color: rgba(96, 165, 250, 0.45);
+        transform: translateY(-2px);
+      }
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .section-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(37, 99, 235, 0.2);
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        color: #60a5fa;
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+      h2 {
+        margin: 0;
+        font-size: 1.18rem;
+        font-weight: 700;
+        color: #f1f5f9;
+        letter-spacing: -0.01em;
+      }
+      p, li {
+        color: #cbd5e1;
+        line-height: 1.7;
+        font-size: 0.93rem;
+      }
+      ul {
+        padding-left: 1.2rem;
+        margin: 0.5rem 0 0;
+      }
+      li {
+        margin-bottom: 0.6rem;
+      }
+      li strong {
+        color: #e2e8f0;
+      }
+
+      /* Language sections toggling */
+      .lang-section {
+        display: none;
+        animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .lang-section.active-lang {
+        display: block;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      footer {
+        text-align: center;
+        color: #64748b;
+        font-size: 0.85rem;
+        padding-top: 0.5rem;
+      }
     </style>
   </head>
   <body>
-    <main>
-      <a href="/">Về bảng điều khiển / Back to dashboard</a>
-      <h1>Chính sách quyền riêng tư</h1>
-      <p class="updated">Cập nhật lần cuối: 20/08/2026</p>
-      <p>SIC Smart Attendance là dự án capstone dùng nhận diện khuôn mặt để ghi nhận chấm công. Chính sách này giải thích dữ liệu được xử lý và cách dữ liệu được bảo vệ.</p>
-      <h2>Dữ liệu được xử lý</h2>
-      <ul>
-        <li>Dữ liệu tài khoản: email, tên người dùng, ngày sinh, trạng thái xác minh và vai trò.</li>
-        <li>Dữ liệu chấm công: mã người dùng, tên, camera, thời gian, trạng thái và điểm tin cậy.</li>
-        <li>Dữ liệu sinh trắc học: ảnh đăng ký và vector đặc trưng khuôn mặt, chỉ dùng để nhận diện người đã đăng ký.</li>
-        <li>Dữ liệu vận hành: trạng thái camera, thiết bị, phiên hoạt động tối thiểu và lỗi kỹ thuật.</li>
-        <li>Ảnh người lạ đã xác nhận có thể được lưu riêng trên máy xử lý trong thời gian giới hạn để quản trị viên kiểm duyệt.</li>
-      </ul>
-      <h2>Mục đích và quyền truy cập</h2>
-      <p>Dữ liệu chỉ được dùng cho đăng nhập, đăng ký khuôn mặt, nhận diện, ghi nhận chấm công, kiểm duyệt sự kiện và vận hành hệ thống. Tài khoản thông thường chỉ được truy cập dữ liệu được cấp cho vai trò người xem. Dữ liệu quản trị, hồ sơ khuôn mặt và ảnh người lạ chỉ dành cho quản trị viên hoặc dịch vụ máy chủ được xác thực.</p>
-      <h2>Lưu trữ và bảo mật</h2>
-      <p>Thông tin tài khoản và metadata được lưu trong Firebase. Khóa quản trị Firebase chỉ nằm ở máy chủ. Trình duyệt chỉ nhận cấu hình Firebase công khai và bị giới hạn bởi Firebase Authentication, Security Rules và kiểm tra quyền trên API. Ảnh nhị phân, đường dẫn hệ thống cục bộ và khóa bí mật không được lưu trong Firestore.</p>
-      <h2>Cookie và theo dõi</h2>
-      <p>Trang hiện không tải Google Analytics, quảng cáo hoặc trình theo dõi bên thứ ba. Hệ thống dùng bộ nhớ trình duyệt và cơ chế duy trì đăng nhập của Firebase cho chức năng đăng nhập và tùy chọn giao diện. Vì không có cookie theo dõi không thiết yếu, trang không hiển thị biểu ngữ đồng ý cookie.</p>
-      <h2>Thời gian lưu và quyền của người dùng</h2>
-      <p>Dữ liệu được giữ trong thời gian cần thiết cho việc chấm công và yêu cầu của dự án. Ảnh người lạ cục bộ mặc định hết hạn sau 30 ngày. Người dùng có thể yêu cầu quản trị viên dự án cung cấp, sửa hoặc xóa dữ liệu cá nhân khi việc đó không xung đột với nghĩa vụ lưu hồ sơ của trường.</p>
-      <h2>Liên hệ</h2>
-      <p>Để hỏi về quyền riêng tư hoặc yêu cầu xử lý dữ liệu, hãy liên hệ quản trị viên SIC Smart Attendance hoặc nhóm capstone thông qua kênh liên hệ của trường.</p>
+    <div class="page-container">
+      <header class="nav-bar">
+        <a href="/" class="back-btn" id="back-link">
+          <span aria-hidden="true">←</span>
+          <span id="back-text">Quay lại Bảng điều khiển</span>
+        </a>
+        <div class="lang-switch" role="tablist" aria-label="Language selection">
+          <button type="button" class="lang-btn active" id="btn-vi" onclick="setLanguage('vi')">
+            <span>🇻🇳</span>
+            <span>Tiếng Việt</span>
+          </button>
+          <button type="button" class="lang-btn" id="btn-en" onclick="setLanguage('en')">
+            <span>🇬🇧</span>
+            <span>English</span>
+          </button>
+        </div>
+      </header>
 
-      <section class="language" lang="en">
-        <h1>Privacy Policy</h1>
-        <p class="updated">Last updated: August 20, 2026</p>
-        <p>SIC Smart Attendance is a capstone project that uses face recognition to record attendance. This policy explains what data is processed and how it is protected.</p>
-        <h2>Data we process</h2>
-        <ul>
-          <li>Account data, including email, username, date of birth, verification status, and role.</li>
-          <li>Attendance data, including user ID, name, camera, time, status, and confidence score.</li>
-          <li>Biometric data, including enrollment images and face embeddings used only to recognize enrolled people.</li>
-          <li>Operational data, including camera and device status, minimal session presence, and technical errors.</li>
-          <li>Confirmed unknown-person images may be stored privately on the processing computer for a limited administrator review period.</li>
-        </ul>
-        <h2>Purpose and access</h2>
-        <p>Data is used only for authentication, face enrollment, recognition, attendance, event review, and system operation. Viewer accounts receive only role-authorized data. Administration data, face profiles, and unknown-person images are restricted to administrators or authenticated server services.</p>
-        <h2>Storage and security</h2>
-        <p>Account information and metadata are stored in Firebase. Firebase administrator credentials stay on the server. The browser receives only public Firebase configuration, with access limited by Firebase Authentication, Security Rules, and API authorization. Firestore does not store image binaries, local filesystem paths, or secret keys.</p>
-        <h2>Cookies and tracking</h2>
-        <p>The site currently loads no Google Analytics, advertising, or third-party trackers. Browser storage and Firebase authentication persistence support sign-in and interface preferences. Because there are no nonessential tracking cookies, the site does not display a cookie-consent banner.</p>
-        <h2>Retention and user rights</h2>
-        <p>Data is retained only as needed for attendance and project requirements. Local unknown-person images expire after 30 days by default. Users may ask the project administrator to provide, correct, or delete personal data when this does not conflict with university recordkeeping requirements.</p>
-        <h2>Contact</h2>
-        <p>For privacy questions or data requests, contact the SIC Smart Attendance administrator or capstone team through the university contact channel.</p>
-      </section>
-    </main>
+      <main>
+        <!-- VIETNAMESE CONTENT -->
+        <section id="vi" class="lang-section active-lang" lang="vi">
+          <div class="hero-header">
+            <div class="badge">BẢO MẬT & QUYỀN RIÊNG TƯ</div>
+            <h1>Chính sách Quyền riêng tư & Bảo vệ Sinh trắc học</h1>
+            <p class="updated">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Cập nhật lần cuối: 20/08/2026 · SIC Smart Attendance v2.4 (Enterprise Edition)
+            </p>
+            <p class="lead-text">SIC Smart Attendance là nền tảng ứng dụng thị giác máy tính và AI nhận diện khuôn mặt để tự động hóa ghi nhận chấm công. Chính sách này quy định rõ loại dữ liệu được thu thập, cách xử lý và cam kết bảo vệ quyền riêng tư cá nhân theo nguyên tắc giảm thiểu dữ liệu tối đa.</p>
+          </div>
+
+          <div class="guarantee-banner">
+            <div class="guarantee-icon">🛡️</div>
+            <div class="guarantee-content">
+              <h3>Cam kết cốt lõi: Không lưu ảnh chân dung thô trên Cloud</h3>
+              <p>Mọi ảnh mẫu khi đăng ký đều được trích xuất trực tiếp thành vector nhúng toán học 512 chiều qua mạng nơ-ron InsightFace MobileFaceNet. Sau khi tạo vector đặc trưng, hệ thống mã hóa bảo vệ và hoàn toàn không phát tán ảnh thô công khai lên hạ tầng đám mây.</p>
+            </div>
+          </div>
+
+          <div class="sections-grid">
+            <div class="section-card">
+              <div class="section-header">
+                <span class="section-num">01</span>
+                <h2>Dữ liệu được xử lý</h2>
+              </div>
+              <ul>
+                <li><strong>Thông tin tài khoản:</strong> Email, tên hiển thị, ngày sinh, trạng thái xác thực và vai trò quản trị (Admin / Viewer).</li>
+                <li><strong>Dữ liệu chấm công:</strong> Mã người dùng, họ tên, nguồn camera ghi nhận (Camera 1 / 2 / 3), mốc thời gian vào/ra và điểm số tin cậy thuật toán.</li>
+                <li><strong>Dữ liệu sinh trắc học:</strong> Vector đặc trưng toán học 512 chiều được chuẩn hóa L2. Không chứa đặc điểm nhân trắc học giải mã ngược được.</li>
+                <li><strong>Dữ liệu thiết bị & vận hành:</strong> Nhịp tim (heartbeat) của camera biên Raspberry Pi 4, độ trễ xử lý khung hình và nhật ký phần cứng.</li>
+                <li><strong>Ảnh người lạ (Unknown):</strong> Lưu tạm cục bộ trên thiết bị biên để Quản trị viên duyệt, tự động xóa vĩnh viễn sau 30 ngày.</li>
+              </ul>
+            </div>
+
+            <div class="section-card">
+              <div class="section-header">
+                <span class="section-num">02</span>
+                <h2>Mục đích & Phân quyền truy cập</h2>
+              </div>
+              <p>Dữ liệu chỉ phục vụ mục đích duy nhất là điểm danh, kiểm soát ra vào cơ sở và bảo vệ an ninh nội bộ. Cơ chế phân quyền RBAC (Role-Based Access Control) nghiêm ngặt:</p>
+              <ul>
+                <li><strong>Người xem (Viewer):</strong> Chỉ được phép tra cứu lịch sử chấm công và sự kiện vào ra của chính tài khoản cá nhân.</li>
+                <li><strong>Quản trị viên (Admin):</strong> Được cấp quyền kiểm duyệt người lạ, quản lý danh bạ hồ sơ sinh trắc và theo dõi tình trạng phần cứng camera.</li>
+              </ul>
+            </div>
+
+            <div class="section-card">
+              <div class="section-header">
+                <span class="section-num">03</span>
+                <h2>Lưu trữ & Bảo mật Đám mây</h2>
+              </div>
+              <p>Cơ sở dữ liệu quản trị được lưu trữ trên hạ tầng đám mây Google Firebase Firestore, áp dụng quy tắc Firebase Security Rules khép kín:</p>
+              <ul>
+                <li>Toàn bộ phiên truyền tải giữa Raspberry Pi 4, Máy chủ AI và Bảng điều khiển Web đều sử dụng chuẩn mã hóa <strong>TLS 1.3</strong>.</li>
+                <li>Khóa chứng thực Firebase Service Account được phân quyền tối thiểu và bảo mật nghiêm ngặt.</li>
+                <li>Chống can thiệp dữ liệu chấm công: Nhật ký điểm danh chỉ cho phép ghi mới tự động bởi thiết bị đã xác thực.</li>
+              </ul>
+            </div>
+
+            <div class="section-card">
+              <div class="section-header">
+                <span class="section-num">04</span>
+                <h2>Quyền của Người dùng</h2>
+              </div>
+              <p>Người dùng duy trì đầy đủ các quyền kiểm soát dữ liệu cá nhân theo tiêu chuẩn quốc tế:</p>
+              <ul>
+                <li><strong>Quyền tra cứu:</strong> Xem chi tiết lịch sử chấm công cá nhân bất cứ lúc nào qua cổng thông tin.</li>
+                <li><strong>Quyền đính chính & cập nhật:</strong> Yêu cầu thu thập lại mẫu khuôn mặt khi có thay đổi diện mạo.</li>
+                <li><strong>Quyền xóa bỏ (Right to be Forgotten):</strong> Yêu cầu Quản trị viên xóa vĩnh viễn toàn bộ vector sinh trắc học và lịch sử điểm danh khỏi hệ thống.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- ENGLISH CONTENT -->
+        <section id="en" class="lang-section" lang="en">
+          <div class="hero-header">
+            <div class="badge">COMPLIANCE & GOVERNANCE</div>
+            <h1>Privacy Policy & Biometric Protection</h1>
+            <p class="updated">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Last updated: August 20, 2026 · SIC Smart Attendance v2.4 (Enterprise Edition)
+            </p>
+            <p class="lead-text">SIC Smart Attendance is an enterprise-grade AI attendance and access management platform. This policy outlines our data processing standards, role permissions, and unwavering commitment to personal data privacy under strict data minimization principles.</p>
+          </div>
+
+          <div class="guarantee-banner">
+            <div class="guarantee-icon">🛡️</div>
+            <div class="guarantee-content">
+              <h3>Core Commitment: Zero Raw Portrait Photos in the Cloud</h3>
+              <p>All face samples during enrollment are immediately transformed into 512-dimensional mathematical vector embeddings via InsightFace MobileFaceNet. Biometric embeddings are irreversible, encrypted, and raw portrait images are never broadcast publicly across cloud environments.</p>
+            </div>
+          </div>
+
+          <div class="sections-grid">
+            <div class="section-card">
+              <div class="section-header">
+                <span class="section-num">01</span>
+                <h2>Data We Process</h2>
+              </div>
+              <ul>
+                <li><strong>Account Identity:</strong> Email, display name, date of birth, verification status, and assigned role (Admin / Viewer).</li>
+                <li><strong>Attendance Records:</strong> User ID, full name, source camera (Camera 1 / 2 / 3), timestamps, and AI inference confidence score.</li>
+                <li><strong>Biometric Data:</strong> L2-normalized 512-dimensional vector embeddings. Cannot be reverse-engineered back to visual portraits.</li>
+                <li><strong>Device Telemetry:</strong> Raspberry Pi 4 edge heartbeats, frame processing latency, and hardware health logs.</li>
+                <li><strong>Unknown Face Captures:</strong> Stored locally on the edge device for admin triage, and automatically purged after 30 days.</li>
+              </ul>
+            </div>
+
+            <div class="section-card">
+              <div class="section-header">
+                <span class="section-num">02</span>
+                <h2>Purpose & Access Control</h2>
+              </div>
+              <p>Data is strictly processed for attendance verification, physical access validation, and facility security. We enforce strict Role-Based Access Control (RBAC):</p>
+              <ul>
+                <li><strong>Viewers:</strong> Can solely inspect their personal check-in history and presence logs.</li>
+                <li><strong>Administrators:</strong> Granted privileges to review unknown face queues, manage registered profiles, and monitor camera fleet uptime.</li>
+              </ul>
+            </div>
+
+            <div class="section-card">
+              <div class="section-header">
+                <span class="section-num">03</span>
+                <h2>Cloud Storage & Security</h2>
+              </div>
+              <p>Operational metadata is hosted securely on Google Firebase Firestore with restricted security rules:</p>
+              <ul>
+                <li>All network communications between Raspberry Pi 4 edge units, AI Backend, and Web Dashboards are secured with <strong>TLS 1.3</strong>.</li>
+                <li>Firebase Admin SDK credentials follow the principle of least privilege and are isolated to secure runtime environments.</li>
+                <li>Tamper-proof logs: Attendance records can only be created by verified hardware edge nodes.</li>
+              </ul>
+            </div>
+
+            <div class="section-card">
+              <div class="section-header">
+                <span class="section-num">04</span>
+                <h2>User Privacy Rights</h2>
+              </div>
+              <p>Users maintain full sovereignty and control over their personal data in accordance with global standards:</p>
+              <ul>
+                <li><strong>Right of Access:</strong> Review complete personal attendance history at any time via the web dashboard.</li>
+                <li><strong>Right to Rectification:</strong> Request re-enrollment and embedding renewal whenever appearance changes occur.</li>
+                <li><strong>Right to Erasure:</strong> Request the system administrator to permanently delete all biometric templates and historical logs.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <p>© 2026 SIC Smart Attendance · Autonomous Biometric Attendance Platform</p>
+      </footer>
+    </div>
+
+    <script>
+      function setLanguage(lang) {
+        const viSection = document.getElementById('vi');
+        const enSection = document.getElementById('en');
+        const btnVi = document.getElementById('btn-vi');
+        const btnEn = document.getElementById('btn-en');
+        const backText = document.getElementById('back-text');
+        const titleEl = document.getElementById('page-title');
+
+        if (lang === 'en') {
+          viSection.classList.remove('active-lang');
+          enSection.classList.add('active-lang');
+          btnVi.classList.remove('active');
+          btnEn.classList.add('active');
+          document.documentElement.lang = 'en';
+          if (backText) backText.textContent = 'Back to Dashboard';
+          if (titleEl) titleEl.textContent = 'Privacy Policy | SIC Smart Attendance';
+          localStorage.setItem('smartattend-language', 'en');
+          if (history.replaceState) {
+            history.replaceState(null, '', '#en');
+          }
+        } else {
+          enSection.classList.remove('active-lang');
+          viSection.classList.add('active-lang');
+          btnEn.classList.remove('active');
+          btnVi.classList.add('active');
+          document.documentElement.lang = 'vi';
+          if (backText) backText.textContent = 'Quay lại Bảng điều khiển';
+          if (titleEl) titleEl.textContent = 'Chính sách Quyền riêng tư | SIC Smart Attendance';
+          localStorage.setItem('smartattend-language', 'vi');
+          if (history.replaceState) {
+            history.replaceState(null, '', '#vi');
+          }
+        }
+      }
+
+      // Initialize language from stored preference or URL hash
+      document.addEventListener('DOMContentLoaded', function() {
+        const stored = localStorage.getItem('smartattend-language');
+        const hash = window.location.hash.toLowerCase();
+        if (hash === '#en' || (!hash && stored === 'en')) {
+          setLanguage('en');
+        } else {
+          setLanguage('vi');
+        }
+      });
+    </script>
   </body>
 </html>

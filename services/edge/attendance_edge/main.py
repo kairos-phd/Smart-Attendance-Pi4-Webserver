@@ -16,8 +16,11 @@ from .face_engine import FaceEngine
 from .firebase_repository import FirebaseRepository
 from .local_store import LocalStore
 from .models import Event, RegisteredUser, utc_now
+from .remote_ingest import RemoteIngestClient
 
 LOG = logging.getLogger(__name__)
+
+MAX_RETRIES = 5
 
 
 class AttendanceService:
@@ -26,34 +29,58 @@ class AttendanceService:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         (settings.data_dir / "unknown").mkdir(parents=True, exist_ok=True)
         self.store = LocalStore(settings.data_dir / "edge.db")
-        self.repo = FirebaseRepository(settings)
+        self.repo = FirebaseRepository(settings) if settings.firebase_service_account else None
         self.engine = FaceEngine(settings.model_name, settings.model_root, settings.face_det_size, settings.match_threshold)
+        self.remote_client = (
+            RemoteIngestClient(settings.backend_api_url, settings.device_api_key)
+            if settings.backend_api_url
+            else None
+        )
         self.users: list[RegisteredUser] = []
         self.user_lock = threading.Lock()
         self.ai_lock = threading.Lock()
         self.stop_event = threading.Event()
 
     def start(self) -> None:
-        self.engine.start()
-        try:
-            self.refresh_users()
-        except Exception:
-            # The Pi can boot before Wi-Fi is associated. It must still monitor and queue events.
-            LOG.exception("Firebase is unavailable at startup; beginning with an empty user cache")
-        threading.Thread(target=self._sync_loop, name="firebase-sync", daemon=True).start()
-        threading.Thread(target=self._user_refresh_loop, name="user-refresh", daemon=True).start()
+        if self.engine:
+            self.engine.start()
+        if self.repo:
+            try:
+                self.refresh_users()
+            except Exception:
+                # The Pi can boot before Wi-Fi is associated. It must still monitor and queue events.
+                LOG.warning("Firebase is unavailable at startup; loading cached user embeddings from local store", exc_info=True)
+                self.load_cached_users()
+            threading.Thread(target=self._sync_loop, name="firebase-sync", daemon=True).start()
+            threading.Thread(target=self._user_refresh_loop, name="user-refresh", daemon=True).start()
+        if self.remote_client:
+            health = self.remote_client.check_health()
+            if health:
+                LOG.info("Connected to AI Backend at %s (version %s)", self.settings.backend_api_url, health.get("version"))
+            else:
+                LOG.warning("AI Backend at %s not responding to health check; will retry in background", self.settings.backend_api_url)
+            threading.Thread(target=self._heartbeat_loop, name="remote-heartbeat", daemon=True).start()
 
     def refresh_users(self) -> None:
         users = self.repo.active_users()
         with self.user_lock:
             self.users = users
-        LOG.info("Loaded %d active user embeddings", len(users))
+        self.store.save_users(users)
+        LOG.info("Loaded and cached %d active user embeddings", len(users))
+
+    def load_cached_users(self) -> None:
+        cached = self.store.load_users()
+        with self.user_lock:
+            self.users = cached
+        LOG.info("Loaded %d cached user embeddings from local store", len(cached))
 
     def _user_refresh_loop(self) -> None:
         while not self.stop_event.wait(self.settings.user_refresh_seconds):
             try:
                 self.refresh_users()
             except Exception:
+                if not self.users:
+                    self.load_cached_users()
                 LOG.exception("Could not refresh registered users; retaining previous cache")
 
     def _sync_loop(self) -> None:
@@ -63,26 +90,82 @@ class AttendanceService:
 
     def flush_queue(self) -> None:
         for row in self.store.pending():
+            row_id = int(row["id"])
+            attempts = int(row["attempts"])
+            if attempts >= MAX_RETRIES:
+                self.store.mark_failed(row_id)
+                LOG.warning("Event %d exceeded max retries (%d); skipping to avoid deadlock", row_id, MAX_RETRIES)
+                continue
             try:
                 import json
 
                 self.repo.write_event(row["event_type"], json.loads(row["payload"]))
-                self.store.complete(int(row["id"]))
-                LOG.info("Synchronized queued %s event %s", row["event_type"], row["id"])
+                self.store.complete(row_id)
+                LOG.info("Synchronized queued %s event %s", row["event_type"], row_id)
             except Exception:
-                self.store.mark_retry(int(row["id"]))
+                self.store.mark_retry(row_id)
+                new_attempts = attempts + 1
+                if new_attempts >= MAX_RETRIES:
+                    self.store.mark_failed(row_id)
+                    LOG.error(
+                        "Event %d failed %d times; marked failed to prevent head-of-line blocking",
+                        row_id,
+                        new_attempts,
+                        exc_info=True,
+                    )
+                    continue
                 LOG.warning("Firebase still unavailable; pending events retained", exc_info=True)
                 return
 
+    def _heartbeat_loop(self) -> None:
+        while not self.stop_event.is_set():
+            if self.remote_client:
+                cams = [{"camera_id": c.camera_id, "name": c.name, "status": "online"} for c in self.settings.cameras]
+                self.remote_client.send_heartbeat(self.settings.pi_id, cams)
+            self.stop_event.wait(30)
+
     def camera_status(self, camera: CameraConfig, status: str, message: str | None) -> None:
-        try:
-            self.repo.camera_status(camera, status, message)
-        except Exception:
-            LOG.warning("Unable to publish %s status for %s", status, camera.camera_id, exc_info=True)
+        if self.repo:
+            try:
+                self.repo.camera_status(camera, status, message)
+            except Exception:
+                LOG.warning("Unable to publish %s status for %s", status, camera.camera_id, exc_info=True)
+        if self.remote_client:
+            try:
+                self.remote_client.send_heartbeat(
+                    self.settings.pi_id,
+                    [{"camera_id": camera.camera_id, "name": camera.name, "status": status}],
+                    status=status,
+                )
+            except Exception:
+                pass
 
     def handle_activity(self, camera: CameraConfig, frame: np.ndarray) -> None:
-        # This lock protects Pi CPU/RAM: camera loops remain responsive while one AI job runs.
-        if not self.ai_lock.acquire(blocking=False):
+        if self.remote_client:
+            res = self.remote_client.ingest_frame(
+                camera_id=camera.camera_id,
+                camera_name=camera.name,
+                raspberry_pi_id=self.settings.pi_id,
+                frame=frame,
+            )
+            if res is not None:
+                results = res.get("results", [])
+                for r in results:
+                    if r.get("result") == "recognized":
+                        LOG.info("Remote recognized %s on %s (%.3f)", r.get("name"), camera.camera_id, r.get("confidence", 0.0))
+                    elif r.get("result") == "unknown":
+                        LOG.info("Remote detected unknown face on %s", camera.camera_id)
+                return
+            if not self.repo or not self.engine:
+                LOG.warning("Remote ingest failed on %s and local fallback is unavailable", camera.camera_id)
+                return
+            LOG.info("Remote ingest failed; falling back to local inference")
+
+        if not self.engine:
+            return
+        # Protect Pi CPU/RAM: camera loops remain responsive while one AI job runs.
+        # Use a short timeout so near-simultaneous triggers from multiple cameras can be processed.
+        if not self.ai_lock.acquire(timeout=0.35):
             LOG.debug("Skipping activity from %s while another AI job is running", camera.camera_id)
             return
         try:
@@ -132,14 +215,18 @@ class AttendanceService:
         return None
 
     def _submit(self, event: Event) -> None:
-        try:
-            self.repo.write_event(event.event_type, event.payload())
-        except Exception:
-            self.store.enqueue(event.event_type, event.payload())
-            LOG.warning("Firebase write failed; queued %s event locally", event.event_type, exc_info=True)
+        if self.repo:
+            try:
+                self.repo.write_event(event.event_type, event.payload())
+                return
+            except Exception:
+                LOG.warning("Firebase write failed; queued %s event locally", event.event_type, exc_info=True)
+        self.store.enqueue(event.event_type, event.payload())
 
     def run(self) -> None:
         self.start()
+        cam_ids = [camera.camera_id for camera in self.settings.cameras]
+        LOG.info("Starting edge attendance service with %d camera(s): %s", len(cam_ids), ", ".join(cam_ids))
         workers = [
             CameraWorker(camera, self.settings, self.stop_event, self.handle_activity, self.camera_status)
             for camera in self.settings.cameras

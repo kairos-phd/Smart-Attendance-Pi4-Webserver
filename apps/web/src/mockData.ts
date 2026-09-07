@@ -23,15 +23,16 @@ export function createMockData(language: Language): {
   cameras: Camera[];
   users: ManagedUser[];
 } {
-  const attendanceMoments = [at(0, 8, 2), at(0, 8, 7), at(0, 8, 15), at(0, 13, 3), at(-1, 7, 58), at(-1, 8, 11), at(-3, 8, 5)];
+  const attendanceMoments = [at(0, 8, 2), at(0, 8, 7), at(0, 8, 15), at(0, 13, 3), at(-1, 7, 58), at(-1, 8, 11), at(-3, 8, 5), at(0, 17, 30)];
   const people = [
     ['Nguyễn Minh Anh', 'SIC001', 'camera-1'],
     ['Trần Gia Huy', 'SIC002', 'camera-1'],
     ['Lê Khánh Linh', 'SIC003', 'camera-2'],
     ['Phạm Quốc Bảo', 'SIC004', 'camera-2'],
-    ['Nguyễn Minh Anh', 'SIC001', 'camera-1'],
+    ['Nguyễn Minh Anh', 'SIC001', 'camera-3'],
     ['Võ Hoàng Nam', 'SIC005', 'camera-2'],
     ['Trần Gia Huy', 'SIC002', 'camera-1'],
+    ['Lê Khánh Linh', 'SIC003', 'camera-3'],
   ];
   const attendance: Attendance[] = attendanceMoments.map((moment, index) => ({
     id: `demo-attendance-${index + 1}`,
@@ -45,22 +46,23 @@ export function createMockData(language: Language): {
     status: 'recognized',
     raspberry_pi_id: 'pi-classroom-01',
   }));
-  const unknownMoments = [at(0, 9, 34), at(-1, 14, 12)];
+  const unknownMoments = [at(0, 9, 34), at(-1, 14, 12), at(0, 16, 45)];
+  const unknownCamIds = ['camera-1', 'camera-2', 'camera-3'];
   const unknown: UnknownEvent[] = unknownMoments.map((moment, index) => ({
     id: `demo-unknown-${index + 1}`,
     event_id: `demo-unknown-${index + 1}`,
-    camera_id: index === 0 ? 'camera-1' : 'camera-2',
+    camera_id: unknownCamIds[index % unknownCamIds.length],
     timestamp: stamp(moment),
-    confidence: index === 0 ? 0.314 : 0.287,
+    confidence: index === 0 ? 0.314 : index === 1 ? 0.287 : 0.332,
     image_url: `demo://unknown/${index + 1}`,
     review_status: 'pending',
     recognition_status: 'unknown',
     raspberry_pi_id: 'pi-classroom-01',
   }));
-  const cameraNames = language === 'vi' ? ['Camera lối vào', 'Camera khu vực làm việc'] : ['Entrance camera', 'Workspace camera'];
   const cameras: Camera[] = [
-    { id: 'camera-1', camera_id: 'camera-1', name: cameraNames[0], location: language === 'vi' ? 'Lối vào chính' : 'Main entrance', status: 'online', raspberry_pi_id: 'pi-classroom-01', last_seen: stamp(at(0, new Date().getHours(), new Date().getMinutes())) },
-    { id: 'camera-2', camera_id: 'camera-2', name: cameraNames[1], location: language === 'vi' ? 'Khu vực làm việc' : 'Workspace', status: 'online', raspberry_pi_id: 'pi-classroom-01', last_seen: stamp(at(0, new Date().getHours(), new Date().getMinutes())) },
+    { id: 'camera-1', camera_id: 'camera-1', name: 'Camera 1', location: language === 'vi' ? 'Lối vào chính' : 'Main entrance', status: 'online', raspberry_pi_id: 'pi-classroom-01', last_seen: stamp(at(0, new Date().getHours(), new Date().getMinutes())) },
+    { id: 'camera-2', camera_id: 'camera-2', name: 'Camera 2', location: language === 'vi' ? 'Khu vực làm việc' : 'Workspace', status: 'online', raspberry_pi_id: 'pi-classroom-01', last_seen: stamp(at(0, new Date().getHours(), new Date().getMinutes())) },
+    { id: 'camera-3', camera_id: 'camera-3', name: 'Camera 3', location: language === 'vi' ? 'Lối ra' : 'Exit gate', status: 'online', raspberry_pi_id: 'pi-classroom-01', last_seen: stamp(at(0, new Date().getHours(), new Date().getMinutes())) },
   ];
   const users: ManagedUser[] = [
     { id: 'demo-user-1', name: 'Nguyễn Minh Anh', student_id: 'SIC001', status: 'active', registration_date: iso(at(-30, 9, 0)) },

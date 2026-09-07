@@ -274,8 +274,10 @@ def main() -> None:
 
             if not args.no_preview:
                 preview = frame.copy()
-                cv2.putText(preview, status_text, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (90, 230, 170), 2)
-                cv2.imshow("SIC PC Camera Capture", preview)
+                window_name = f"SIC PC Camera Capture ({args.camera_id})"
+                overlay_text = f"[{args.camera_id}] {status_text}"
+                cv2.putText(preview, overlay_text, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (90, 230, 170), 2)
+                cv2.imshow(window_name, preview)
                 if cv2.waitKey(1) & 0xFF in {ord("q"), 27}:
                     break
             remaining = frame_interval - (time.monotonic() - loop_started)

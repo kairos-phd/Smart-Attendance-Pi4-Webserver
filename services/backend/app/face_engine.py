@@ -13,6 +13,7 @@ class RegisteredUser:
     name: str
     embeddings: list[list[float]]
     student_id: str | None = None
+    centroid: list[float] | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,9 @@ class FaceEngine:
         self.match_threshold = match_threshold
         self.match_margin = match_margin
         self._app = None
+        self._centroid_cache: dict[str, np.ndarray] = {}
+        self._cached_users_id: int | None = None
+        self._cached_profile_matrix: np.ndarray | None = None
 
     def start(self) -> None:
         from insightface.app import FaceAnalysis
@@ -158,13 +162,39 @@ class FaceEngine:
             raise ValueError("The face profile could not be normalized")
         return (centroid / norm).tolist()
 
+    def clear_centroid_cache(self) -> None:
+        self._centroid_cache.clear()
+        self._cached_users_id = None
+        self._cached_profile_matrix = None
+
+    def _get_profile_matrix(self, users: list[RegisteredUser]) -> np.ndarray | None:
+        if not users:
+            return None
+        if self._cached_users_id == id(users) and self._cached_profile_matrix is not None:
+            return self._cached_profile_matrix
+
+        vectors: list[np.ndarray] = []
+        for user in users:
+            cached = self._centroid_cache.get(user.user_id)
+            if cached is None:
+                if user.centroid is not None:
+                    cached = np.asarray(user.centroid, dtype=np.float32)
+                else:
+                    cached = np.asarray(self.profile_embedding(user.embeddings), dtype=np.float32)
+                self._centroid_cache[user.user_id] = cached
+            vectors.append(cached)
+
+        matrix = np.asarray(vectors, dtype=np.float32)
+        self._cached_users_id = id(users)
+        self._cached_profile_matrix = matrix
+        return matrix
+
     def recognize(self, image: np.ndarray, users: list[RegisteredUser]) -> list[Recognition]:
         if self._app is None:
             raise RuntimeError("The face engine is not ready")
         faces = self._app.get(image)
-        profile_matrix = np.asarray(
-            [self.profile_embedding(user.embeddings) for user in users], dtype=np.float32
-        ) if users else None
+        height, width = image.shape[:2]
+        profile_matrix = self._get_profile_matrix(users)
         results: list[Recognition] = []
         for face in faces:
             embedding = np.asarray(face.normed_embedding, dtype=np.float32)
@@ -180,6 +210,6 @@ class FaceEngine:
                     second_score = float(similarities[int(ranking[1])])
                 if best_score >= self.match_threshold and best_score - second_score >= self.match_margin:
                     matched_user = users[best_index]
-            x1, y1, x2, y2 = (int(value) for value in face.bbox)
-            results.append(Recognition(best_score, second_score, (x1, y1, x2, y2), matched_user))
+            bbox = self._face_bounds(face, width, height)
+            results.append(Recognition(best_score, second_score, bbox, matched_user))
         return results

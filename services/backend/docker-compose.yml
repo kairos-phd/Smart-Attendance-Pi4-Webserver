@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: .
+    container_name: sic-ai-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ../../secrets:/app/secrets:ro
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: sic-tunnel
+    restart: always
+    network_mode: host
+    command: tunnel --config /etc/cloudflared/config.yml run sic-fastapi
+    volumes:
+      - ../../.cloudflared:/etc/cloudflared:ro
+      - ~/.cloudflared:/root/.cloudflared:ro

@@ -45,7 +45,8 @@ class BackendSettings:
         service_account = os.getenv("FIREBASE_SERVICE_ACCOUNT")
         default_origins = (
             "http://localhost:5173,http://localhost:5174,http://localhost:8081,"
-            "https://sicccc-30fed.firebaseapp.com,https://sicccc-30fed.web.app"
+            "https://sicccc-30fed.firebaseapp.com,https://sicccc-30fed.web.app,"
+            "https://sic4b.io.vn,https://www.sic4b.io.vn"
         )
         return cls(
             firebase_service_account=Path(service_account).expanduser().resolve() if service_account else None,
@@ -56,7 +57,7 @@ class BackendSettings:
             match_threshold=float(os.getenv("MATCH_THRESHOLD", "0.45")),
             match_margin=float(os.getenv("MATCH_MARGIN", "0.06")),
             enrollment_consistency_threshold=float(os.getenv("ENROLLMENT_CONSISTENCY_THRESHOLD", "0.60")),
-            cors_origins=[value.strip() for value in os.getenv("CORS_ORIGINS", default_origins).split(",") if value.strip()],
+            cors_origins=[value.strip().rstrip("/") for value in os.getenv("CORS_ORIGINS", default_origins).split(",") if value.strip()],
             data_dir=Path(os.getenv("DATA_DIR", str(backend_root / "data"))).expanduser().resolve(),
             save_enrollment_images=_as_bool(os.getenv("SAVE_ENROLLMENT_IMAGES"), True),
             ai_enabled=_as_bool(os.getenv("AI_ENABLED"), True),

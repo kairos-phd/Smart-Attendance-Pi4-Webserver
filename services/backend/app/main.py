@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import time
@@ -55,6 +56,7 @@ class AppState:
     recognition_history: dict[tuple[str, str], list[float]]
     unknown_history: dict[str, list[float]]
     recovered_local_profiles: int
+    device_heartbeats: dict[str, float]
 
     def __init__(self) -> None:
         self.startup_errors = []
@@ -64,6 +66,7 @@ class AppState:
         self.recognition_history = {}
         self.unknown_history = {}
         self.recovered_local_profiles = 0
+        self.device_heartbeats = {}
 
 
 state = AppState()
@@ -176,6 +179,7 @@ def root() -> dict[str, str]:
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health() -> dict[str, Any]:
     ready = state.db is not None and state.engine is not None
     return {
@@ -235,6 +239,12 @@ def _user_view(document: Any) -> UserView:
     )
 
 
+def _invalidate_users_cache() -> None:
+    state.users_cache = []
+    if state.engine is not None:
+        state.engine.clear_centroid_cache()
+
+
 def _active_users() -> list[RegisteredUser]:
     now = time.monotonic()
     if state.users_cache and now - state.users_cache_at < state.settings.user_refresh_seconds:
@@ -245,14 +255,20 @@ def _active_users() -> list[RegisteredUser]:
         data = document.to_dict()
         embedding = data.get("face_embedding")
         if isinstance(embedding, list) and embedding:
-            users.append(RegisteredUser(document.id, data.get("name", "Unnamed"), [embedding], data.get("student_id")))
+            users.append(RegisteredUser(
+                document.id,
+                data.get("name", "Unnamed"),
+                [embedding],
+                data.get("student_id"),
+                centroid=embedding,
+            ))
     state.users_cache = users
     state.users_cache_at = now
     return users
 
 
 def _captured_at(value: str | None) -> datetime:
-    if not value:
+    if not value or not isinstance(value, str):
         return datetime.now(timezone.utc)
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -386,9 +402,9 @@ async def create_user(
         if upload.content_type not in {"image/jpeg", "image/png", "image/webp"}:
             raise HTTPException(status_code=400, detail=f"Enrollment photo {index} must be JPEG, PNG, or WebP")
         raw = await upload.read()
-        image = _decode_image(raw, f"Enrollment photo {index}")
+        image = await asyncio.to_thread(_decode_image, raw, f"Enrollment photo {index}")
         try:
-            sample = engine.enrollment_sample(image)
+            sample = await asyncio.to_thread(engine.enrollment_sample, image)
         except ValueError as exc:
             safe_filename = Path(upload.filename or "").name
             label = f"Photo {index}" + (f" ({safe_filename})" if safe_filename else "")
@@ -407,7 +423,7 @@ async def create_user(
             "ignored_background_faces": sample.ignored_background_faces,
         })
 
-    profile_embedding = engine.profile_embedding(embeddings)
+    profile_embedding = await asyncio.to_thread(engine.profile_embedding, embeddings)
     sample_matrix = np.asarray(embeddings, dtype=np.float32)
     consistency = sample_matrix @ np.asarray(profile_embedding, dtype=np.float32)
     if float(np.min(consistency)) < state.settings.enrollment_consistency_threshold:
@@ -415,14 +431,16 @@ async def create_user(
 
     clean_name = name.strip()
     clean_student_id = student_id.strip()
-    existing = list(db.collection("users").where("student_id", "==", clean_student_id).limit(1).stream())
+    existing = await asyncio.to_thread(
+        lambda: list(db.collection("users").where("student_id", "==", clean_student_id).limit(1).stream())
+    )
     if existing:
         raise HTTPException(status_code=409, detail="A user with this student ID already exists")
 
     user_id = uuid4().hex
     assert state.dataset is not None
     try:
-        state.dataset.save(user_id, images, embeddings, {
+        await asyncio.to_thread(state.dataset.save, user_id, images, embeddings, {
             "name": clean_name,
             "student_id": clean_student_id,
             "sample_count": len(images),
@@ -438,8 +456,10 @@ async def create_user(
     try:
         if state.bucket:
             image_path = f"registration/{user_id}/{uuid4().hex}.jpg"
-            blob = state.bucket.blob(image_path)
-            blob.upload_from_string(raw_images[0], content_type=uploads[0].content_type)
+            def _upload_blob() -> None:
+                blob = state.bucket.blob(image_path)
+                blob.upload_from_string(raw_images[0], content_type=uploads[0].content_type)
+            await asyncio.to_thread(_upload_blob)
         payload = {
             "name": clean_name,
             "student_id": clean_student_id,
@@ -451,12 +471,13 @@ async def create_user(
             "status": "active",
         }
         reference = db.collection("users").document(user_id)
-        reference.set(payload)
+        await asyncio.to_thread(reference.set, payload)
     except Exception:
-        state.dataset.remove(user_id)
+        await asyncio.to_thread(state.dataset.remove, user_id)
         raise
-    state.users_cache = []
-    return _user_view(reference.get())
+    _invalidate_users_cache()
+    doc = await asyncio.to_thread(reference.get)
+    return _user_view(doc)
 
 
 @app.patch("/api/users/{user_id}", response_model=UserView)
@@ -473,7 +494,7 @@ def update_user(user_id: str, update: UserUpdate, _: dict = Depends(require_admi
         if duplicates:
             raise HTTPException(status_code=409, detail="A user with this student ID already exists")
     reference.update(changes)
-    state.users_cache = []
+    _invalidate_users_cache()
     return _user_view(reference.get())
 
 
@@ -484,12 +505,13 @@ def deactivate_user(user_id: str, _: dict = Depends(require_admin)) -> None:
     if not reference.get().exists:
         raise HTTPException(status_code=404, detail="User not found")
     reference.update({"status": "inactive", "deactivated_at": firestore.SERVER_TIMESTAMP})
-    state.users_cache = []
+    _invalidate_users_cache()
 
 
 @app.post("/api/devices/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
-def device_heartbeat(device: DeviceHeartbeat, _: None = Depends(_require_device)) -> None:
-    _write_heartbeat(device)
+async def device_heartbeat(device: DeviceHeartbeat, _: None = Depends(_require_device)) -> None:
+    state.device_heartbeats[device.device_id] = time.monotonic()
+    await asyncio.to_thread(_write_heartbeat, device)
 
 
 @app.get("/api/unknown-events/{event_id}/image")
@@ -547,12 +569,14 @@ def _update_confirmation_history(
         history_camera, user_id = key
         if history_camera != camera_id:
             continue
-        if user_id not in recognized_user_ids:
-            del state.recognition_history[key]
-            continue
         history = [seen for seen in state.recognition_history[key] if seen >= cutoff]
-        history.append(now)
-        state.recognition_history[key] = history[-state.settings.recognition_confirmations:]
+        if user_id in recognized_user_ids:
+            history.append(now)
+            state.recognition_history[key] = history[-state.settings.recognition_confirmations:]
+        elif history:
+            state.recognition_history[key] = history
+        else:
+            del state.recognition_history[key]
 
     counts: dict[str, int] = {}
     for user_id in recognized_user_ids:
@@ -561,10 +585,12 @@ def _update_confirmation_history(
             state.recognition_history[key] = [now]
         counts[user_id] = len(state.recognition_history[key])
 
+    history = [seen for seen in state.unknown_history.get(camera_id, []) if seen >= cutoff]
     if unknown_present:
-        history = [seen for seen in state.unknown_history.get(camera_id, []) if seen >= cutoff]
         history.append(now)
         state.unknown_history[camera_id] = history[-state.settings.unknown_confirmations:]
+    elif history:
+        state.unknown_history[camera_id] = history
     else:
         state.unknown_history.pop(camera_id, None)
     return counts, len(state.unknown_history.get(camera_id, []))
@@ -584,19 +610,29 @@ async def ingest_frame(
     engine = _require_ai()
     if frame.content_type not in {"image/jpeg", "image/png", "image/webp"}:
         raise HTTPException(status_code=400, detail="Frame must be JPEG, PNG, or WebP")
-    image = _decode_image(await frame.read(), "Frame")
+    raw = await frame.read()
+    image = await asyncio.to_thread(_decode_image, raw, "Frame")
     occurred_at = _captured_at(captured_at)
     frame_id = uuid4().hex
-    _write_heartbeat(DeviceHeartbeat(
-        device_id=raspberry_pi_id,
-        name=raspberry_pi_id,
-        device_type=device_type,
-        cameras=[{"camera_id": camera_id, "name": camera_name, "status": "online"}],
-    ))
-
-    recognitions = engine.recognize(image, _active_users())
-    results: list[RecognitionView] = []
     now_mono = time.monotonic()
+
+    clean_device_type = device_type if isinstance(device_type, str) else "raspberry_pi"
+    clean_camera_name = camera_name if isinstance(camera_name, str) else "Camera"
+
+    # COST-01: Throttle heartbeat updates to at most once every 60 seconds per device
+    if now_mono - state.device_heartbeats.get(raspberry_pi_id, 0.0) >= 60.0:
+        state.device_heartbeats[raspberry_pi_id] = now_mono
+        heartbeat = DeviceHeartbeat(
+            device_id=raspberry_pi_id,
+            name=raspberry_pi_id,
+            device_type=clean_device_type,
+            cameras=[{"camera_id": camera_id, "name": clean_camera_name, "status": "online"}],
+        )
+        await asyncio.to_thread(_write_heartbeat, heartbeat)
+
+    active_users = await asyncio.to_thread(_active_users)
+    recognitions = await asyncio.to_thread(engine.recognize, image, active_users)
+    results: list[RecognitionView] = []
     local_date = occurred_at.astimezone(ZoneInfo(state.settings.deployment_timezone)).date().isoformat()
     unknown_written = False
     matched_user_ids = {item.user.user_id for item in recognitions if item.user is not None}
@@ -615,7 +651,7 @@ async def ingest_frame(
             event_id = None
             if accepted:
                 event_id = uuid4().hex
-                db.collection("attendance").document(event_id).set({
+                attendance_payload = {
                     "attendance_id": event_id,
                     "user_id": user.user_id,
                     "name": user.name,
@@ -626,7 +662,10 @@ async def ingest_frame(
                     "status": "recognized",
                     "raspberry_pi_id": raspberry_pi_id,
                     "created_at": firestore.SERVER_TIMESTAMP,
-                })
+                }
+                await asyncio.to_thread(
+                    db.collection("attendance").document(event_id).set, attendance_payload
+                )
                 state.attendance_cooldowns[user.user_id] = now_mono
             results.append(RecognitionView(
                 result="recognized",
@@ -648,12 +687,14 @@ async def ingest_frame(
                 image_reference = None
                 if state.unknown_store is not None:
                     try:
-                        state.unknown_store.save(event_id, image, recognition.bbox)
+                        await asyncio.to_thread(
+                            state.unknown_store.save, event_id, image, recognition.bbox
+                        )
                         image_reference = f"local://unknown/{event_id}.jpg"
                     except Exception:
                         LOG.exception("Could not save local image for unknown event %s", event_id)
                 try:
-                    db.collection("unknown_events").document(event_id).set({
+                    unknown_payload = {
                         "event_id": event_id,
                         "camera_id": camera_id,
                         "timestamp": occurred_at,
@@ -665,10 +706,13 @@ async def ingest_frame(
                         "image_url": image_reference,
                         "raspberry_pi_id": raspberry_pi_id,
                         "created_at": firestore.SERVER_TIMESTAMP,
-                    })
+                    }
+                    await asyncio.to_thread(
+                        db.collection("unknown_events").document(event_id).set, unknown_payload
+                    )
                 except Exception:
                     if image_reference and state.unknown_store is not None:
-                        state.unknown_store.delete(event_id)
+                        await asyncio.to_thread(state.unknown_store.delete, event_id)
                     raise
                 state.unknown_cooldowns[camera_id] = now_mono
                 state.unknown_history.pop(camera_id, None)

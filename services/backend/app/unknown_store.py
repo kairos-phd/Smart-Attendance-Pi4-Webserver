@@ -54,7 +54,10 @@ class UnknownImageStore:
         cutoff = time.time() - self.retention_seconds
         removed = 0
         for path in self.root.glob("*.jpg"):
-            if path.stat().st_mtime < cutoff:
-                path.unlink()
-                removed += 1
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+                    removed += 1
+            except OSError:
+                continue
         return removed

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from uuid import uuid4
+
+try:
+    from zoneinfo import ZoneInfo
+    LOCAL_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+except Exception:
+    LOCAL_TZ = timezone(timedelta(hours=7))
 
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
@@ -48,6 +54,9 @@ class FirebaseRepository:
 
     def write_event(self, event_type: str, payload: dict) -> None:
         occurred_at = datetime.fromisoformat(payload["occurred_at"])
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        local_time = occurred_at.astimezone(LOCAL_TZ)
         if event_type == "attendance":
             doc = {
                 "attendance_id": payload["event_id"],
@@ -55,7 +64,7 @@ class FirebaseRepository:
                 "name": payload["name"],
                 "camera_id": payload["camera_id"],
                 "timestamp": occurred_at,
-                "date": occurred_at.date().isoformat(),
+                "date": local_time.date().isoformat(),
                 "confidence": payload["confidence"],
                 "status": "recognized",
                 "raspberry_pi_id": self.pi_id,
