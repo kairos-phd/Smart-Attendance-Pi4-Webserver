@@ -88,3 +88,22 @@ export async function updateAdminAccount(id: string, changes: { role?: 'admin' |
     body: JSON.stringify(changes),
   })).json();
 }
+
+export type PiControl = { recognition_enabled: boolean; selected_camera_id?: string };
+export type PiStatus = { pi_id: string; camera_ids: string[]; health: unknown; control: PiControl };
+export type PiEvent = { observation_id: string; occurred_at: string; name?: string | null; student_id?: string | null; camera_ids: string[]; similarity?: number | null; status: string; display_status: string; reason: string; model_version?: string };
+export async function getPiStatus(): Promise<PiStatus> { return (await request('/api/pi/status')).json(); }
+export async function updatePiControl(update: { recognition_enabled?: boolean; camera_id?: string }): Promise<PiControl> {
+  return (await request('/api/pi/control', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(update) })).json();
+}
+export async function getPiEvents(): Promise<PiEvent[]> {
+  const result = await (await request('/api/pi/recognition-events?limit=100')).json();
+  return Array.isArray(result) ? result : result.events ?? [];
+}
+
+export async function createPiSession(cameraId: string, sdp: string): Promise<{ session_id: string }> {
+  return (await request('/api/pi/webrtc-sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ camera_id: cameraId, offer: { type: 'offer', sdp } }) })).json();
+}
+export async function deletePiSession(sessionId: string): Promise<void> {
+  await request(`/api/pi/webrtc-sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+}

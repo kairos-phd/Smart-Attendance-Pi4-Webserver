@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from firebase_admin import auth as firebase_auth, credentials, firestore, storage
 
+from .pi_proxy import router as pi_router
 from .auth import require_admin
 from .dataset import LocalDataset
 from .face_engine import FaceEngine, RegisteredUser
@@ -159,6 +160,7 @@ async def lifespan(_: FastAPI):
 
 settings_for_cors = BackendSettings.from_env()
 app = FastAPI(title="SIC Smart Attendance Laptop API", version=VERSION, lifespan=lifespan)
+app.include_router(pi_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings_for_cors.cors_origins,
@@ -498,20 +500,22 @@ def update_user(user_id: str, update: UserUpdate, _: dict = Depends(require_admi
     return _user_view(reference.get())
 
 
-@app.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def deactivate_user(user_id: str, _: dict = Depends(require_admin)) -> None:
+@app.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
+def deactivate_user(user_id: str, _: dict = Depends(require_admin)) -> Response:
     db = _require_database()
     reference = db.collection("users").document(user_id)
     if not reference.get().exists:
         raise HTTPException(status_code=404, detail="User not found")
     reference.update({"status": "inactive", "deactivated_at": firestore.SERVER_TIMESTAMP})
     _invalidate_users_cache()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@app.post("/api/devices/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
-async def device_heartbeat(device: DeviceHeartbeat, _: None = Depends(_require_device)) -> None:
+@app.post("/api/devices/heartbeat", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
+async def device_heartbeat(device: DeviceHeartbeat, _: None = Depends(_require_device)) -> Response:
     state.device_heartbeats[device.device_id] = time.monotonic()
     await asyncio.to_thread(_write_heartbeat, device)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get("/api/unknown-events/{event_id}/image")
@@ -527,7 +531,7 @@ def unknown_event_image(event_id: str, _: dict = Depends(require_admin)) -> File
     return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, no-store"})
 
 
-@app.patch("/api/unknown-events/{event_id}/review", status_code=status.HTTP_204_NO_CONTENT)
+@app.patch("/api/unknown-events/{event_id}/review", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 def review_unknown_event(event_id: str, review: UnknownReview, admin: dict = Depends(require_admin)) -> Response:
     db = _require_database()
     reference = db.collection("unknown_events").document(event_id)
@@ -542,7 +546,7 @@ def review_unknown_event(event_id: str, review: UnknownReview, admin: dict = Dep
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@app.delete("/api/unknown-events/{event_id}/image", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete("/api/unknown-events/{event_id}/image", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 def delete_unknown_event_image(event_id: str, _: dict = Depends(require_admin)) -> Response:
     db = _require_database()
     reference = db.collection("unknown_events").document(event_id)

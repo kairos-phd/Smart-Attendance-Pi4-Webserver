@@ -42,3 +42,5 @@ Complete commands, deployment and recovery guidance are in [Runbook](docs/RUNBOO
 - The mobile app is deliberately a read-oriented companion. User enrollment remains dashboard/admin-only because facial enrollment is a privileged action.
 - Optional LCD, LED and buzzer have no implementation dependency. PIR remains excluded: OpenCV motion detection is the documented trigger.
 - Camera model, inference time, recognition threshold, camera resolution and long-duration stability are **test-required**, not claimed performance results.
+
+Pi video/Recog admin integration and no-PC deployment options: [PI_WEB_INTEGRATION.md](docs/PI_WEB_INTEGRATION.md).
