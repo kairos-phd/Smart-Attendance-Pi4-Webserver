@@ -5,7 +5,7 @@ const ts = require('typescript');
 const vm = require('node:vm');
 const exportsObject = {};
 // The missing helper is represented as the former unbounded table behavior.
-const file = require('node:path').resolve(__dirname, '../src/components/tablePagination.ts');
+const file = require('node:path').resolve(__dirname, '../src/components/paginationUtils.ts');
 if (fs.existsSync(file)) vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText, {exports:exportsObject});
 const paginate = exportsObject.paginate ?? ((rows) => ({rows,page:0,pages:1}));
 const latest = exportsObject.latestFirst ?? (rows => rows);
@@ -17,8 +17,19 @@ test('pagination hook retains older page on polling then resets when a new row a
  const states=[];let cursor=0;
  const react={useState:initial=>{const slot=cursor++;if(!(slot in states))states[slot]=initial;return[states[slot],next=>{states[slot]=typeof next==='function'?next(states[slot]):next}];}};
  const hookExports={};const source=fs.readFileSync(require('node:path').resolve(__dirname,'../src/components/TablePagination.tsx'),'utf8');
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020}}).outputText,{exports:hookExports,require:name=>name==='react'?react:name==='./tablePagination'?exportsObject:{}});
+ vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020}}).outputText,{exports:hookExports,require:name=>name==='react'?react:name==='./paginationUtils'?exportsObject:{}});
  const render=values=>{cursor=0;return hookExports.useTablePagination(values,row=>String(row.id),row=>row.time)};
  let page=render(rows);assert.equal(page.rows.length,10);page.setPage(2);page=render([...rows]);assert.equal(page.page,2);assert.equal(page.rows[0].id,80);
  page=render([...rows,{id:102,time:102}]);assert.equal(page.page,0);assert.equal(page.rows[0].id,102);page.setSize(100);page=render(rows);assert.equal(page.rows.length,100);
+});
+
+// Reproduce Windows' case-insensitive .ts-before-.tsx module resolution.
+test('Windows resolves the pagination component to TSX, not a similarly named helper',()=>{
+ const path=require('node:path');
+ const host={...ts.sys,fileExists:file=>{
+   try {return fs.readdirSync(path.dirname(file)).some(name=>name.toLowerCase()===path.basename(file).toLowerCase());}
+   catch {return false;}
+ }};
+ const resolved=ts.resolveModuleName('./TablePagination',path.resolve(__dirname,'../src/components/PiPanel.tsx'),{moduleResolution:ts.ModuleResolutionKind.Bundler},host).resolvedModule;
+ assert.equal(resolved?.extension,ts.Extension.Tsx);
 });

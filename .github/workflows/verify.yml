@@ -10,7 +10,10 @@ permissions:
 
 jobs:
   website:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: apps/web
@@ -27,7 +30,7 @@ jobs:
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:
-          name: website-verification-build
+          name: website-verification-build-${{ matrix.os }}
           path: apps/web/web-build
           retention-days: 7
           if-no-files-found: error

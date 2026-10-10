@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { latestFirst, pageForRows, paginate } from './tablePagination';
+import { latestFirst, pageForRows, paginate } from './paginationUtils';
 export function useTablePagination<T>(rows: T[], id: (row: T) => string, time?: (row: T) => number, filterKey = '') {
   const ordered = time ? latestFirst(rows, time) : rows;
   const key = JSON.stringify([filterKey, ordered.map(id)]);
