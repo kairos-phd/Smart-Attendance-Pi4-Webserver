@@ -2,7 +2,7 @@ export type Language = 'en' | 'vi';
 
 const en = {
   locale: 'en-US',
-  nav: { overview: 'Overview', attendance: 'Attendance', users: 'Users', unknown: 'Unknown', devices: 'Devices', admin: 'Administration', recog: 'Pi attendance' },
+  nav: { overview: 'Overview', attendance: 'Attendance', users: 'Users', unknown: 'Unknown', devices: 'Devices', admin: 'Administration', recog: 'Check-in' },
   common: {
     user: 'User', online: 'Online', offline: 'Offline', checking: 'Checking', active: 'Active', inactive: 'Inactive',
     close: 'Close', refresh: 'Refresh', settings: 'Settings', loading: 'Loading…', demo: 'Demo', noImage: 'No image', viewImage: 'View image',
@@ -149,7 +149,7 @@ const en = {
 
 const vi: typeof en = {
   locale: 'vi-VN',
-  nav: { overview: 'Tổng quan', attendance: 'Chấm công', users: 'Người dùng', unknown: 'Người lạ', devices: 'Thiết bị', admin: 'Quản trị', recog: 'Điểm danh Pi' },
+  nav: { overview: 'Tổng quan', attendance: 'Chấm công', users: 'Người dùng', unknown: 'Người lạ', devices: 'Thiết bị', admin: 'Quản trị', recog: 'Điểm danh' },
   common: {
     user: 'Người dùng', online: 'Trực tuyến', offline: 'Ngoại tuyến', checking: 'Đang kiểm tra', active: 'Đang hoạt động', inactive: 'Đã vô hiệu hóa',
     close: 'Đóng', refresh: 'Làm mới', settings: 'Cài đặt', loading: 'Đang tải…', demo: 'Minh họa', noImage: 'Không có ảnh', viewImage: 'Xem ảnh',

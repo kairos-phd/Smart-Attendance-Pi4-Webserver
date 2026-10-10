@@ -1121,7 +1121,7 @@ function App() {
       </div>
       <div id="dashboard-navigation" className={navigationOpen ? 'sidebar-drawer open' : 'sidebar-drawer'}>
         <div className="drawer-brand"><img className="drawer-brand-logo" src="/sic-ai-mark.svg" alt="" /><div><strong>SIC Smart Attendance</strong><small>{copy.dashboard.subtitle}</small></div></div>
-        <nav>{visibleTabs.map(key => <button key={key} className={tab === key ? 'nav active' : 'nav'} onClick={() => { setTab(key); setNavigationOpen(false); }}>{key === 'recog' && <span aria-hidden="true">📷 </span>}{tabLabel(copy, key)}</button>)}</nav>
+        <nav>{visibleTabs.map(key => <button key={key} className={tab === key ? 'nav active' : 'nav'} onClick={() => { setTab(key); setNavigationOpen(false); }}>{tabLabel(copy, key)}</button>)}</nav>
         <div className="sidebar-footer">
           <div className="user-profile-widget">
             <div className="profile-widget-top">
