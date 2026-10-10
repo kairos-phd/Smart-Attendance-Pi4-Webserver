@@ -47,3 +47,37 @@ class DashboardProxyTests(unittest.TestCase):
             self.assertEqual(response.status_code,504)
             self.assertIn('Refresh registered users before retrying',response.json()['detail'])
             self.assertEqual(upstream.call_count,1)
+
+    def test_unknown_review_is_admin_only_and_uses_fixed_target_and_server_token(self):
+        identifier = 'a'*32
+        path = '/api/pi/unknown-events/'+identifier+'/review'
+        with patch('app.pi_proxy.requests.request') as upstream:
+            self.assertEqual(self.client.patch(path,json={'decision':'reviewed'}).status_code,401)
+            with patch('app.auth.auth.verify_id_token',return_value={'uid':'viewer','admin':False}):
+                self.assertEqual(self.client.patch(path,headers=self.headers,json={'decision':'reviewed'}).status_code,403)
+            upstream.assert_not_called()
+            upstream.return_value = Mock(status_code=200,json=lambda:{'observation_id':identifier,'review_status':'reviewed','reviewed_at':'2026-10-10T00:00:00+00:00','reviewed_by':'shared-token-admin'})
+            response = self.client.patch(path,headers=self.headers,json={'decision':'reviewed'})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json()['review_status'],'reviewed')
+            self.assertEqual(upstream.call_args.args,('PATCH','http://127.0.0.1:18080/api/unknown-events/'+identifier+'/review'))
+            self.assertEqual(upstream.call_args.kwargs['headers'],{'Authorization':'Bearer private-fixture'})
+            self.assertEqual(upstream.call_args.kwargs['json'],{'decision':'reviewed'})
+            self.assertFalse(upstream.call_args.kwargs['allow_redirects'])
+
+    def test_unknown_review_validates_identifier_body_and_private_token(self):
+        path = '/api/pi/unknown-events/'+'a'*32+'/review'
+        with patch('app.pi_proxy.requests.request') as upstream:
+            for body in [{'decision':'pending'},{'decision':True},{'decision':'reviewed','uid':'victim'},{'decision':'reviewed','url':'https://attacker.example'}]:
+                self.assertEqual(self.client.patch(path,headers=self.headers,json=body).status_code,422)
+            self.assertEqual(self.client.patch('/api/pi/unknown-events/bad-id/review',headers=self.headers,json={'decision':'reviewed'}).status_code,422)
+            with patch.dict(os.environ,{'PI_API_TOKEN':''}):
+                self.assertEqual(self.client.patch(path,headers=self.headers,json={'decision':'reviewed'}).status_code,503)
+            upstream.assert_not_called()
+
+    def test_unknown_review_preserves_generic_upstream_failure(self):
+        with patch('app.pi_proxy.requests.request') as upstream:
+            upstream.return_value = Mock(status_code=404,text='private details')
+            response = self.client.patch('/api/pi/unknown-events/'+'a'*32+'/review',headers=self.headers,json={'decision':'dismissed'})
+            self.assertEqual(response.status_code,404)
+            self.assertEqual(response.json(),{'detail':'Pi API returned HTTP 404'})

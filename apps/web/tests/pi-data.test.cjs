@@ -34,3 +34,13 @@ test('Overview fetch spans seven Vietnam days while today KPI excludes prior rec
  assert.equal(overview.trend[5].count,1);assert.equal(overview.trend[6].dateStr,bounds.end);assert.equal(overview.trend[6].count,2);
  assert.equal(overview.trend.reduce((sum,day)=>sum+day.count,0),4);
 });
+test('Pi review sends raw observation ID to gateway and preserves persisted status',async()=>{
+ const calls=[];const api=moduleFrom('src/api.ts',{'./firebase':{auth:{currentUser:{getIdToken:async()=>'token'}}},'./piData':adapter},{VITE_DATA_SOURCE:'pi',VITE_PI_API_BASE_URL:'https://pi.example'},{fetch:async(url,init)=>{calls.push([url,init]);return{ok:true,json:async()=>({review_status:'reviewed'})}}});
+ await api.reviewUnknownEvent('raw/observation','reviewed');assert.equal(calls[0][0],'https://pi.example/api/pi/unknown-events/raw%2Fobservation/review');assert.equal(JSON.parse(calls[0][1].body).decision,'reviewed');
+ const value=fixture();value.unknown[0].review_status='dismissed';value.unknown[0].reviewed_by='admin';assert.equal(adapter.adaptPiDashboard(value).unknown[0].review_status,'dismissed');
+});
+
+test('cloud review accepts 204 without parsing a missing response body',async()=>{
+ const api=moduleFrom('src/api.ts',{'./firebase':{auth:{currentUser:{getIdToken:async()=>'token'}}},'./piData':adapter},{VITE_API_BASE_URL:'https://cloud.example'},{fetch:async()=>({ok:true,status:204,json:()=>{throw new Error('No body');}})});
+ const result=await api.reviewUnknownEvent('cloud-event','reviewed');assert.equal(Object.keys(result).length,0);
+});

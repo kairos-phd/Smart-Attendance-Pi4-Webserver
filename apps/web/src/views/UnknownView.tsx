@@ -1,6 +1,7 @@
+import { TablePagination, useTablePagination } from '../components/TablePagination';
 import { useEffect, useState } from 'react';
 import { deleteUnknownImage, getUnknownImage, reviewUnknownEvent } from '../api';
-import { apiActionError, asDate, Skeleton, type Toast } from '../dashboardShared';
+import { apiActionError, asDate, timestampMillis, Skeleton, type Toast } from '../dashboardShared';
 import { app } from '../firebase';
 import type { Copy } from '../i18n';
 import type { UnknownEvent } from '../types';
@@ -51,17 +52,31 @@ type Props = {
   loading: boolean;
   apiOnline: boolean;
   demoMode: boolean;
-  readOnly?: boolean;
+  piMode?: boolean;
   onError: (message: string) => void;
   onNotify: (message: string, type?: Toast['type']) => void;
 };
 
-export default function UnknownView({ copy, events, loading, apiOnline, demoMode, readOnly = false, onError, onNotify }: Props) {
+export default function UnknownView({ copy, events, loading, apiOnline, demoMode, piMode = false, onError, onNotify }: Props) {
+  const pagination = useTablePagination(events, event => event.id, event => timestampMillis(event.timestamp));
   const [busyId, setBusyId] = useState<string | null>(null);
   const [demoReviews, setDemoReviews] = useState<Record<string, 'reviewed' | 'dismissed'>>({});
+  const [savedReviews, setSavedReviews] = useState<Record<string, { decision: 'reviewed' | 'dismissed'; reviewedAt: number }>>({});
   const [demoDeletedImages, setDemoDeletedImages] = useState<Set<string>>(() => new Set());
 
-  async function review(eventId: string, decision: 'reviewed' | 'dismissed') {
+  useEffect(() => {
+    if (demoMode) return;
+    setSavedReviews(current => Object.fromEntries(Object.entries(current).filter(([id, local]) => {
+      const persisted = events.find(event => event.id === id);
+      if (!persisted || persisted.review_status === local.decision) return false;
+      // Ignore an older in-flight snapshot, but accept a later review by any admin.
+      const reviewedAt = timestampMillis(persisted.reviewed_at);
+      return !reviewedAt || reviewedAt < local.reviewedAt;
+    })));
+  }, [events, demoMode]);
+
+  async function review(event: UnknownEvent, decision: 'reviewed' | 'dismissed') {
+    const eventId = event.id;
     if (demoMode) {
       setDemoReviews(current => ({ ...current, [eventId]: decision }));
       onNotify(decision === 'reviewed' ? copy.unknown.reviewedToast : copy.unknown.dismissedToast);
@@ -69,7 +84,11 @@ export default function UnknownView({ copy, events, loading, apiOnline, demoMode
     }
     setBusyId(eventId);
     try {
-      await reviewUnknownEvent(eventId, decision);
+      const result = await reviewUnknownEvent(piMode ? event.event_id : eventId, decision);
+      if (piMode && result.reviewed_at) {
+        const reviewedAt = Date.parse(result.reviewed_at);
+        setSavedReviews(current => ({ ...current, [eventId]: { decision, reviewedAt } }));
+      }
       onNotify(decision === 'reviewed' ? copy.unknown.reviewedToast : copy.unknown.dismissedToast);
     } catch (failure) {
       onError(apiActionError(failure, copy.unknown.reviewFailed, copy));
@@ -96,6 +115,6 @@ export default function UnknownView({ copy, events, loading, apiOnline, demoMode
     }
   }
 
-  const controlsReady = !readOnly && (demoMode || apiOnline);
-  return <section className="panel"><div className="panel-title"><div><h2>{copy.unknown.title}</h2><p>{readOnly ? 'Pi observations are read-only. Images and review actions are unavailable.' : copy.unknown.hint}</p></div><span className="record-count">{copy.attendance.showing(events.length)}</span></div>{loading ? <Skeleton rows={5} /> : <div className="table-wrap"><table><thead><tr><th>{copy.common.camera}</th><th>{copy.common.time}</th><th>{copy.common.image}</th><th>{copy.common.status}</th><th>{copy.unknown.actions}</th></tr></thead><tbody>{events.map(event => { const reviewStatus = demoReviews[event.id] ?? event.review_status ?? 'pending'; const imageSource = demoDeletedImages.has(event.id) ? null : event.image_url; return <tr key={event.id}><td>{event.camera_id}</td><td>{asDate(event.timestamp, copy)}</td><td><UnknownImage copy={copy} eventId={event.id} source={imageSource} apiOnline={apiOnline} /></td><td>{readOnly && <small>{event.reason} · {event.model_version || '—'} · {event.confidence.toFixed(3)}</small>}<span className={`pill ${reviewStatus === 'reviewed' ? 'success' : reviewStatus === 'dismissed' ? 'warning' : ''}`}>{readOnly ? 'Observation' : reviewStatus === 'reviewed' ? copy.unknown.reviewed : reviewStatus === 'dismissed' ? copy.unknown.dismissed : copy.unknown.pending}</span></td><td><div className="unknown-actions"><button className="secondary" disabled={!controlsReady || busyId === event.id} onClick={() => void review(event.id, 'reviewed')}>{copy.unknown.keepUnknown}</button><button className="text-button" disabled={!controlsReady || busyId === event.id} onClick={() => void review(event.id, 'dismissed')}>{copy.unknown.dismiss}</button>{imageSource && <button className="danger text-button" disabled={!controlsReady || busyId === event.id} onClick={() => void removeImage(event.id)}>{copy.unknown.deleteImage}</button>}</div></td></tr>; })}{!events.length && <tr><td colSpan={5} className="empty">{copy.unknown.empty}</td></tr>}</tbody></table></div>}</section>;
+  const controlsReady = demoMode || apiOnline;
+  return <section className="panel"><div className="panel-title"><div><h2>{copy.unknown.title}</h2><p>{piMode ? (copy.locale.startsWith('vi') ? 'Xem lại nhật ký đã lưu trên Pi. Ảnh không khả dụng.' : 'Review observations saved on Pi. Images are unavailable.') : copy.unknown.hint}</p></div><span className="record-count">{copy.attendance.showing(events.length)}</span></div>{loading ? <Skeleton rows={5} /> : <div className="table-wrap"><table><thead><tr><th>{copy.common.camera}</th><th>{copy.common.time}</th><th>{copy.common.image}</th><th>{copy.common.status}</th><th>{copy.unknown.actions}</th></tr></thead><tbody>{pagination.rows.map(event => { const reviewStatus = (demoMode ? demoReviews[event.id] : savedReviews[event.id]?.decision) ?? event.review_status ?? 'pending'; const imageSource = demoDeletedImages.has(event.id) ? null : event.image_url; return <tr key={event.id}><td>{event.camera_id}</td><td>{asDate(event.timestamp, copy)}</td><td><UnknownImage copy={copy} eventId={event.id} source={imageSource} apiOnline={apiOnline} /></td><td>{piMode && <small>{event.reason} · <span className="model-version" title={event.model_version}>{event.model_version || '—'}</span> · {event.confidence.toFixed(3)}</small>}<span className={`pill ${reviewStatus === 'reviewed' ? 'success' : reviewStatus === 'dismissed' ? 'warning' : ''}`}>{reviewStatus === 'reviewed' ? copy.unknown.reviewed : reviewStatus === 'dismissed' ? copy.unknown.dismissed : copy.unknown.pending}</span></td><td><div className="unknown-actions"><button className="secondary" disabled={!controlsReady || busyId === event.id} onClick={() => void review(event, 'reviewed')}>{copy.unknown.keepUnknown}</button><button className="text-button" disabled={!controlsReady || busyId === event.id} onClick={() => void review(event, 'dismissed')}>{copy.unknown.dismiss}</button>{!piMode && imageSource && <button className="danger text-button" disabled={!controlsReady || busyId === event.id} onClick={() => void removeImage(event.id)}>{copy.unknown.deleteImage}</button>}</div></td></tr>; })}{!events.length && <tr><td colSpan={5} className="empty">{copy.unknown.empty}</td></tr>}</tbody></table></div>}{!loading && <TablePagination pagination={pagination} locale={copy.locale} />}</section>;
 }

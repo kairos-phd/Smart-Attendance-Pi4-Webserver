@@ -5,7 +5,7 @@ export type PiDashboard = {
   health: { status?: string; online?: boolean; camera_status?: { camera_id: string; name?: string; status: string; last_error?: string }[] };
   users: { user_id: string; name: string; student_id?: string; status: string; created_at?: string }[];
   attendance: { attendance_id: number; user_id: string; name: string; occurred_at: string; camera_ids: string[]; similarity?: number | null }[];
-  unknown: { observation_id: string; occurred_at: string; camera_id: string; similarity?: number | null; reason: string; model_version?: string }[];
+  unknown: { observation_id: string; occurred_at: string; camera_id: string; similarity?: number | null; reason: string; model_version?: string; review_status?: 'pending' | 'reviewed' | 'dismissed'; reviewed_at?: string | null; reviewed_by?: string | null }[];
   next_attendance_id: number | null; next_unknown_rowid: number | null;
 };
 export function piIsoDate(value = new Date()): string {
@@ -36,7 +36,7 @@ export function adaptPiDashboard(data: PiDashboard) {
   }));
   const unknown: UnknownEvent[] = data.unknown.map(row => ({ id: `${prefix}${row.observation_id}`, event_id: row.observation_id,
     camera_id: row.camera_id, timestamp: timestamp(row.occurred_at), confidence: row.similarity ?? 0,
-    recognition_status: 'unknown', reason: row.reason, model_version: row.model_version, raspberry_pi_id: data.pi_id }));
+    review_status: row.review_status, reviewed_at: row.reviewed_at ? timestamp(row.reviewed_at) : undefined, reviewed_by: row.reviewed_by ?? undefined, recognition_status: 'unknown', reason: row.reason, model_version: row.model_version, raspberry_pi_id: data.pi_id }));
   const cameras: Camera[] = (data.health.camera_status ?? []).map(value => ({
     id: `${prefix}${value.camera_id}`, camera_id: value.camera_id, name: value.name || value.camera_id, raspberry_pi_id: data.pi_id,
     status: value.status === 'online' ? 'online' : 'offline',
