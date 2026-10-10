@@ -25,7 +25,7 @@ import {
 } from 'firebase/firestore';
 import { checkApiHealth, getUsers } from './api';
 import DatePicker from './DatePicker';
-import { asDate, exportAttendanceCsv, Skeleton, tabLabel, timestampMillis, type AttendanceRange, type Tab, type Toast } from './dashboardShared';
+import { asDate, exportAttendanceCsv, Skeleton, tabLabel, presenceTab, shouldResetTab, timestampMillis, type AttendanceRange, type Tab, type Toast } from './dashboardShared';
 import PersonalizedBentoDashboard from './components/PersonalizedBentoDashboard';
 import { auth, db } from './firebase';
 import { translations, type Copy, type Language } from './i18n';
@@ -41,12 +41,13 @@ type LayoutMode = 'bento' | 'classic';
 type AuthMode = 'sign-in' | 'sign-up' | 'reset';
 type LoadingState = { attendance: boolean; unknown: boolean; cameras: boolean; users: boolean };
 
-const tabs: Tab[] = ['overview', 'attendance', 'users', 'unknown', 'devices', 'admin'];
+const tabs: Tab[] = ['overview', 'attendance', 'recog', 'users', 'unknown', 'devices', 'admin'];
 const CAMERA_HEARTBEAT_TIMEOUT_MS = 35_000;
 const today = () => localIsoDate();
 const UsersView = lazy(() => import('./views/UsersView'));
 const UnknownView = lazy(() => import('./views/UnknownView'));
 const AdminView = lazy(() => import('./views/AdminView'));
+const PiPanel = lazy(() => import('./components/PiPanel'));
 
 function cameraHeartbeatOnline(camera: Camera, now: number) {
   const lastSeen = timestampMillis(camera.last_seen);
@@ -745,6 +746,7 @@ function App() {
   const registering = useRef(false);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [roleChecked, setRoleChecked] = useState(false);
   const [username, setUsername] = useState('');
   const [tab, setTab] = useState<Tab>(() => (tabs.includes(localStorage.getItem('smartattend-tab') as Tab) ? localStorage.getItem('smartattend-tab') as Tab : 'overview'));
   const [attendance, setAttendance] = useState<Attendance[]>([]);
@@ -797,7 +799,7 @@ function App() {
   const copy = translations[language];
 
   const mock = useMemo(() => createMockData(language), [language]);
-  const visibleTabs = useMemo(() => isAdmin ? tabs : tabs.filter(key => key !== 'users' && key !== 'unknown' && key !== 'admin'), [isAdmin]);
+  const visibleTabs = useMemo(() => isAdmin ? tabs : tabs.filter(key => key !== 'users' && key !== 'unknown' && key !== 'admin' && key !== 'recog'), [isAdmin]);
   const notify = useCallback((message: string, type: Toast['type'] = 'success') => {
     const id = Date.now() + Math.random();
     setToasts(current => [...current, { id, message, type }]);
@@ -867,16 +869,22 @@ function App() {
     if (registering.current) return;
     setUser(currentUser);
     setIsAdmin(false);
+    setRoleChecked(!currentUser);
     if (currentUser) {
       void currentUser.getIdTokenResult().then(token => {
-        if (auth.currentUser?.uid === currentUser.uid) setIsAdmin(token.claims.admin === true);
-      }).catch(() => setIsAdmin(false));
+        if (auth.currentUser?.uid === currentUser.uid) {
+          setIsAdmin(token.claims.admin === true);
+          setRoleChecked(true);
+        }
+      }).catch(() => {
+        if (auth.currentUser?.uid === currentUser.uid) { setIsAdmin(false); setRoleChecked(true); }
+      });
     }
   }), []);
 
   useEffect(() => {
-    if (!isAdmin && (tab === 'users' || tab === 'unknown' || tab === 'admin')) setTab('overview');
-  }, [isAdmin, tab]);
+    if (shouldResetTab(tab, isAdmin, roleChecked)) setTab('overview');
+  }, [isAdmin, roleChecked, tab]);
 
   useEffect(() => {
     if (!user || (!user.emailVerified && !isAdmin)) return;
@@ -887,7 +895,7 @@ function App() {
         uid: user.uid,
         email: user.email ?? '',
         display_name: user.displayName ?? user.email?.split('@')[0] ?? copy.common.user,
-        current_tab: tab,
+        current_tab: presenceTab(tab),
         visibility: document.visibilityState === 'visible' ? 'active' : 'hidden',
         last_seen: serverTimestamp(),
       }).catch(() => undefined);
@@ -1113,7 +1121,7 @@ function App() {
       </div>
       <div id="dashboard-navigation" className={navigationOpen ? 'sidebar-drawer open' : 'sidebar-drawer'}>
         <div className="drawer-brand"><img className="drawer-brand-logo" src="/sic-ai-mark.svg" alt="" /><div><strong>SIC Smart Attendance</strong><small>{copy.dashboard.subtitle}</small></div></div>
-        <nav>{visibleTabs.map(key => <button key={key} className={tab === key ? 'nav active' : 'nav'} onClick={() => { setTab(key); setNavigationOpen(false); }}>{tabLabel(copy, key)}</button>)}</nav>
+        <nav>{visibleTabs.map(key => <button key={key} className={tab === key ? 'nav active' : 'nav'} onClick={() => { setTab(key); setNavigationOpen(false); }}>{key === 'recog' && <span aria-hidden="true">📷 </span>}{tabLabel(copy, key)}</button>)}</nav>
         <div className="sidebar-footer">
           <div className="user-profile-widget">
             <div className="profile-widget-top">
@@ -1197,6 +1205,7 @@ function App() {
         {isAdmin && tab === 'users' && <Suspense fallback={<Skeleton rows={5} />}><UsersView copy={copy} users={sourceUsers} apiOnline={apiOnline} demoMode={demoMode} loading={!demoMode && loading.users} onRefresh={async () => { await refreshUsers(); notify(copy.users.refreshed, 'info'); }} onChanged={refreshUsers} onError={setError} onNotify={notify} /></Suspense>}
         {isAdmin && tab === 'unknown' && <Suspense fallback={<Skeleton rows={5} />}><UnknownView copy={copy} events={sourceUnknown} loading={!demoMode && loading.unknown} apiOnline={apiOnline === true && !demoMode} demoMode={demoMode} onError={setError} onNotify={notify} /></Suspense>}
         {tab === 'devices' && <DeviceView copy={copy} cameras={sourceCameras} loading={!demoMode && loading.cameras} />}
+        {isAdmin && tab === 'recog' && <Suspense fallback={<Skeleton rows={5} />}><PiPanel uid={user.uid} locale={copy.locale} /></Suspense>}
         {isAdmin && tab === 'admin' && <Suspense fallback={<Skeleton rows={5} />}><AdminView copy={copy} currentUid={user.uid} sessions={sessions} apiOnline={apiOnline === true} onError={setError} onNotify={notify} /></Suspense>}
       </div>
       <LegalFooter copy={copy} onOpenPrivacy={() => setPrivacyOpen(true)} />
@@ -1282,7 +1291,7 @@ function App() {
 
       <button
         type="button"
-        className={`bottom-nav-item ${navigationOpen || (tab === 'unknown' || tab === 'admin') ? 'active' : ''}`}
+        className={`bottom-nav-item ${navigationOpen || (tab === 'unknown' || tab === 'admin' || tab === 'recog') ? 'active' : ''}`}
         onClick={() => setNavigationOpen(value => !value)}
         aria-label={navigationOpen ? copy.dashboard.closeNav : copy.dashboard.openNav}
       >

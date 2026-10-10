@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 import unittest
+import os
+import tempfile
 
 import numpy as np
 
@@ -187,11 +189,13 @@ class IngestFrameThrottlingAndPerfTests(unittest.IsolatedAsyncioTestCase):
 
 class EnvConfigTests(unittest.TestCase):
     def test_int_02_service_account_path(self) -> None:
-        env_path = Path(__file__).resolve().parent.parent / ".env"
-        self.assertTrue(env_path.is_file())
-        content = env_path.read_text(encoding="utf-8")
-        self.assertIn("FIREBASE_SERVICE_ACCOUNT=F:/SICWEB/secrets/firebase-service-account.json", content)
-        self.assertNotIn("FIREBASE_SERVICE_ACCOUNT=F:/SIC/secrets/", content)
+        # Configuration is operator-owned; tests must not require private .env files.
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = Path(directory) / "service-account.json"
+            with patch.dict(os.environ, {"FIREBASE_SERVICE_ACCOUNT": str(credential_path)}):
+                settings = BackendSettings.from_env()
+            self.assertEqual(settings.firebase_service_account, credential_path.resolve())
+            self.assertFalse(credential_path.exists())
 
 
 if __name__ == "__main__":

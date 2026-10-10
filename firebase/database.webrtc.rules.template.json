@@ -1,0 +1,14 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "webrtc": {
+      "$uid": {
+        "$session": {
+          ".read": "auth != null && auth.uid === $uid && auth.token.admin === true && (!data.exists() || (data.child('pi_id').val() === 'pi-classroom-01' && (data.child('camera_id').val() === 'icspring' || data.child('camera_id').val() === 'jieli' || data.child('camera_id').val() === 'sonix') && data.child('created_at').isNumber() && data.child('created_at').val() > now - 300000 && data.child('created_at').val() <= now + 10000))",
+          ".write": false
+        }
+      }
+    }
+  }
+}

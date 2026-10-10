@@ -2,6 +2,7 @@ import { auth } from './firebase';
 import type { AdminAccount, ManagedUser } from './types';
 
 const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '');
+const piBase = import.meta.env.VITE_PI_API_BASE_URL?.replace(/\/$/, '') || base;
 
 export async function checkApiHealth(timeoutMs = 3000): Promise<boolean> {
   if (!base) return false;
@@ -23,13 +24,13 @@ export async function checkApiHealth(timeoutMs = 3000): Promise<boolean> {
   }
 }
 
-async function request(path: string, init: RequestInit = {}) {
-  if (!base) throw new Error('VITE_API_BASE_URL is not configured');
+async function request(path: string, init: RequestInit = {}, origin = base) {
+  if (!origin) throw new Error('API origin is not configured');
   const user = auth.currentUser;
   if (!user) throw new Error('Please sign in first');
   const send = async (forceRefresh: boolean) => {
     const token = await user.getIdToken(forceRefresh);
-    return fetch(`${base}${path}`, {
+    return fetch(`${origin}${path}`, {
       ...init,
       headers: { Authorization: `Bearer ${token}`, ...(init.headers || {}) },
     });
@@ -87,4 +88,31 @@ export async function updateAdminAccount(id: string, changes: { role?: 'admin' |
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(changes),
   })).json();
+}
+
+export type PiControl = { recognition_enabled: boolean; selected_camera_id?: string };
+export type PiStatus = { pi_id: string; camera_ids: string[]; health: unknown; control: PiControl };
+export type PiAttendance = { attendance_id: string | number; session_id?: string; user_id: string; name: string; student_id?: string | null; occurred_at: string; camera_ids: string[]; similarity?: number | null; sync_state: string };
+export async function getPiAttendance(): Promise<PiAttendance[]> {
+  const result = await (await piRequest('/api/pi/attendance?limit=100')).json();
+  return Array.isArray(result) ? result : result.attendance ?? [];
+}
+
+export type PiEvent = { observation_id: string; occurred_at: string; name?: string | null; student_id?: string | null; camera_ids: string[]; similarity?: number | null; status: string; display_status: string; reason: string; model_version?: string };
+async function piRequest(path: string, init: RequestInit = {}) { return request(path, init, piBase); }
+
+export async function getPiStatus(): Promise<PiStatus> { return (await piRequest('/api/pi/status')).json(); }
+export async function updatePiControl(update: { recognition_enabled?: boolean; camera_id?: string }): Promise<PiControl> {
+  return (await piRequest('/api/pi/control', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(update) })).json();
+}
+export async function getPiEvents(): Promise<PiEvent[]> {
+  const result = await (await piRequest('/api/pi/recognition-events?limit=100')).json();
+  return Array.isArray(result) ? result : result.events ?? [];
+}
+
+export async function createPiSession(cameraId: string, sdp: string): Promise<{ session_id: string }> {
+  return (await piRequest('/api/pi/webrtc-sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ camera_id: cameraId, offer: { type: 'offer', sdp } }) })).json();
+}
+export async function deletePiSession(sessionId: string): Promise<void> {
+  await piRequest(`/api/pi/webrtc-sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
 }
