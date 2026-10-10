@@ -10,7 +10,7 @@ function moduleFrom(file, dependencies, env = {}, globals = {}) {
   const source = fs.readFileSync(path.join(root, file), 'utf8').replaceAll('import.meta.env', '__env');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 } }).outputText;
   const exports = {};
-  vm.runInNewContext(compiled, { exports, require: name => dependencies[name], __env: env, console, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, ...globals });
+  vm.runInNewContext(compiled, { exports, require: name => dependencies[name] ?? (name === './TablePagination' ? moduleFrom('src/components/TablePagination.tsx', {...dependencies, './tablePagination': moduleFrom('src/components/tablePagination.ts', {})}) : undefined), __env: env, console, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, ...globals });
   return exports;
 }
 

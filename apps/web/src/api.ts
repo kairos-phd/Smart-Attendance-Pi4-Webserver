@@ -70,12 +70,16 @@ export async function getUnknownImage(eventId: string): Promise<Blob> {
   return (await request(`/api/unknown-events/${eventId}/image`, { cache: 'no-store' })).blob();
 }
 
-export async function reviewUnknownEvent(eventId: string, decision: 'reviewed' | 'dismissed'): Promise<void> {
-  await request(`/api/unknown-events/${eventId}/review`, {
+export type UnknownReviewResult = { observation_id?: string; review_status?: 'reviewed' | 'dismissed'; reviewed_at?: string | null; reviewed_by?: string | null };
+export async function reviewUnknownEvent(eventId: string, decision: 'reviewed' | 'dismissed'): Promise<UnknownReviewResult> {
+  const response = await request(`${piDataMode ? "/api/pi/unknown-events" : "/api/unknown-events"}/${encodeURIComponent(eventId)}/review`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ decision }),
   });
+  // Cloud uses authoritative Firestore snapshots and returns no review body.
+  if (!piDataMode || response.status === 204) return {};
+  return response.json();
 }
 
 export async function deleteUnknownImage(eventId: string): Promise<void> {

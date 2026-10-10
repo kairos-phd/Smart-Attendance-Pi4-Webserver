@@ -1,3 +1,4 @@
+import { TablePagination, useTablePagination } from './components/TablePagination';
 import { FormEvent, lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
@@ -1249,7 +1250,7 @@ function App() {
         )}
         {tab === 'attendance' && <AttendanceView copy={copy} language={language} date={date} setDate={setDate} range={attendanceRange} setRange={setAttendanceRange} search={search} setSearch={setSearch} cameraFilter={cameraFilter} setCameraFilter={setCameraFilter} cameras={sourceCameras} entries={filteredAttendance} loading={!demoMode && loading.attendance} onNotify={notify} />}
         {isAdmin && tab === 'users' && <Suspense fallback={<Skeleton rows={5} />}><UsersView copy={copy} users={sourceUsers} apiOnline={piDataMode ? piOnline : apiOnline} demoMode={demoMode} loading={!demoMode && loading.users} onRefresh={async () => { await refreshUsers(); notify(copy.users.refreshed, 'info'); }} onChanged={refreshUsers} onError={setError} onNotify={notify} /></Suspense>}
-        {isAdmin && tab === 'unknown' && <Suspense fallback={<Skeleton rows={5} />}><UnknownView copy={copy} events={sourceUnknown} readOnly={piDataMode && !demoMode} loading={!demoMode && loading.unknown} apiOnline={apiOnline === true && !demoMode} demoMode={demoMode} onError={setError} onNotify={notify} /></Suspense>}
+        {isAdmin && tab === 'unknown' && <Suspense fallback={<Skeleton rows={5} />}><UnknownView copy={copy} events={sourceUnknown} piMode={piDataMode && !demoMode} loading={!demoMode && loading.unknown} apiOnline={(piDataMode ? piOnline : apiOnline === true) && !demoMode} demoMode={demoMode} onError={setError} onNotify={notify} /></Suspense>}
         {tab === 'devices' && <DeviceView copy={copy} cameras={sourceCameras} loading={!demoMode && loading.cameras} />}
         {isAdmin && tab === 'recog' && <Suspense fallback={<Skeleton rows={5} />}><PiPanel uid={user.uid} locale={copy.locale} /></Suspense>}
         {isAdmin && tab === 'admin' && <Suspense fallback={<Skeleton rows={5} />}><AdminView copy={copy} currentUid={user.uid} sessions={sessions} apiOnline={apiOnline === true} onError={setError} onNotify={notify} /></Suspense>}
@@ -1384,6 +1385,7 @@ function Overview({ copy, attendance, unknown, cameras, users, isAdmin, loading,
 }
 
 function AttendanceView({ copy, language, date, setDate, range, setRange, search, setSearch, cameraFilter, setCameraFilter, cameras, entries, loading, onNotify }: { copy: Copy; language: Language; date: string; setDate: (value: string) => void; range: AttendanceRange; setRange: (value: AttendanceRange) => void; search: string; setSearch: (value: string) => void; cameraFilter: string; setCameraFilter: (value: string) => void; cameras: Camera[]; entries: Attendance[]; loading: boolean; onNotify: (message: string, type?: Toast['type']) => void }) {
+  const pagination = useTablePagination(entries, row => row.id, row => timestampMillis(row.timestamp), `${range}/${date}/${search}/${cameraFilter}`);
   const availableCameraIds = useMemo(() => {
     const ids = new Set<string>(piDataMode ? [] : ['camera-1', 'camera-2', 'camera-3']);
     cameras.forEach(c => ids.add(c.camera_id || c.id));
@@ -1410,7 +1412,8 @@ function AttendanceView({ copy, language, date, setDate, range, setRange, search
       <span className="record-count">{copy.attendance.showing(entries.length)}</span>
       <button className="secondary" onClick={exportCsv} disabled={!entries.length}>{copy.attendance.export}</button>
     </div>
-    <AttendanceRows copy={copy} entries={entries} loading={loading} />
+    <AttendanceRows copy={copy} entries={pagination.rows} loading={loading} />
+    {!loading && <TablePagination pagination={pagination} locale={copy.locale} />}
   </section>;
 }
 

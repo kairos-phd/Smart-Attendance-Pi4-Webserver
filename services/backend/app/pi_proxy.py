@@ -31,6 +31,11 @@ class ControlUpdate(BaseModel):
         return self
 
 
+class UnknownReviewUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    decision: Literal['reviewed', 'dismissed']
+
+
 @dataclass
 class PiProxy:
     base: str
@@ -69,8 +74,13 @@ class PiProxy:
                    '/api/control' if mode == 'legacy-loopback' else '/api/control/remote')
 
     def request(self, method, path, authorization, content_type=None, **kwargs):
-        if path not in {'/health', self.control_path, '/api/recognition-events', '/api/attendance', '/api/dashboard', '/api/users'} and not re.fullmatch(r'/api/users/[A-Za-z0-9_-]{1,128}/inactive', path):
+        unknown_review = re.fullmatch(r'/api/unknown-events/[0-9a-f]{32}/review', path)
+        if path not in {'/health', self.control_path, '/api/recognition-events', '/api/attendance', '/api/dashboard', '/api/users'} and not re.fullmatch(r'/api/users/[A-Za-z0-9_-]{1,128}/inactive', path) and not unknown_review:
             raise HTTPException(400, 'Unsupported Pi route')
+        if unknown_review and method != 'PATCH':
+            raise HTTPException(400, 'Unsupported Pi route')
+        if unknown_review and not self.token:
+            raise HTTPException(503, 'PI_API_TOKEN is required for unknown review')
         headers = {} if path == '/api/control' else {'Authorization': f'Bearer {self.token}' if self.token else authorization or ''}
         if content_type:
             headers['Content-Type'] = content_type
@@ -115,6 +125,14 @@ def pi_events(limit: int = Query(default=100, ge=1, le=1000), authorization: str
 @router.get('/attendance')
 def pi_attendance(limit: int = Query(default=100, ge=1, le=500), authorization: str | None = Header(default=None)):
     return PiProxy.from_env().request('GET', '/api/attendance', authorization, params={'limit': limit})
+
+
+@router.patch('/unknown-events/{observation_id}/review')
+def pi_review_unknown(update: UnknownReviewUpdate,
+                      observation_id: str = Path(pattern=r'^[0-9a-f]{32}$'),
+                      authorization: str | None = Header(default=None)):
+    return PiProxy.from_env().request('PATCH', f'/api/unknown-events/{observation_id}/review',
+                                     authorization, json=update.model_dump())
 
 
 class SessionOffer(BaseModel):

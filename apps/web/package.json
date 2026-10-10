@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:pi-stream": "node scripts/test-pi-stream.cjs"
+    "test:pi-stream": "node scripts/test-pi-stream.cjs",
+    "test": "npm run test:pi-stream && node tests/pi-data.test.cjs && node tests/pi-media.test.cjs && node tests/table-pagination.test.cjs && node tests/unknown-review.test.cjs"
   },
   "dependencies": {
     "firebase": "^12.17.1",
