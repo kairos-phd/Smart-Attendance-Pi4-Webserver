@@ -1,0 +1,6 @@
+# Standalone gateway only: python -m pip install -r requirements-media.txt
+fastapi>=0.111,<1
+firebase-admin>=6.5,<7
+python-dotenv>=1.0,<2
+requests>=2.32,<3
+uvicorn[standard]>=0.30,<1

@@ -1,6 +1,13 @@
 import type { Copy } from './i18n';
 
-export type Tab = 'overview' | 'attendance' | 'users' | 'unknown' | 'devices' | 'admin';
+export type Tab = 'overview' | 'attendance' | 'users' | 'unknown' | 'devices' | 'admin' | 'recog';
+// Presence retains the deployed Firestore rule's existing tab enum.
+export function presenceTab(tab: Tab): Exclude<Tab, 'recog'> { return tab === 'recog' ? 'attendance' : tab; }
+
+export function shouldResetTab(tab: Tab, isAdmin: boolean, roleChecked: boolean): boolean {
+  return roleChecked && !isAdmin && ['users', 'unknown', 'admin', 'recog'].includes(tab);
+}
+
 export type AttendanceRange = 'today' | 'yesterday' | 'week' | 'custom';
 export type Toast = { id: number; message: string; type: 'success' | 'info' | 'warning' | 'error' };
 
