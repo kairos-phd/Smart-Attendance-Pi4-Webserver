@@ -23,7 +23,8 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore';
-import { checkApiHealth, getUsers } from './api';
+import { checkApiHealth, getUsers, getPiDashboard, piDataMode } from './api';
+import { piDateBounds, piIsoDate } from './piData';
 import DatePicker from './DatePicker';
 import { asDate, exportAttendanceCsv, Skeleton, tabLabel, presenceTab, shouldResetTab, timestampMillis, type AttendanceRange, type Tab, type Toast } from './dashboardShared';
 import PersonalizedBentoDashboard from './components/PersonalizedBentoDashboard';
@@ -43,7 +44,7 @@ type LoadingState = { attendance: boolean; unknown: boolean; cameras: boolean; u
 
 const tabs: Tab[] = ['overview', 'attendance', 'recog', 'users', 'unknown', 'devices', 'admin'];
 const CAMERA_HEARTBEAT_TIMEOUT_MS = 35_000;
-const today = () => localIsoDate();
+const today = () => piDataMode ? piIsoDate() : localIsoDate();
 const UsersView = lazy(() => import('./views/UsersView'));
 const UnknownView = lazy(() => import('./views/UnknownView'));
 const AdminView = lazy(() => import('./views/AdminView'));
@@ -55,6 +56,7 @@ function cameraHeartbeatOnline(camera: Camera, now: number) {
 }
 
 function attendanceBounds(tab: Tab, range: AttendanceRange, customDate: string) {
+  if (piDataMode) return piDateBounds(tab === 'overview' ? 'overview' : range, customDate);
   if (tab === 'overview' || range === 'today') return { start: today(), end: today() };
   if (range === 'yesterday') return { start: offsetIsoDate(-1), end: offsetIsoDate(-1) };
   if (range === 'week') return { start: startOfCurrentWeek(), end: today() };
@@ -757,6 +759,7 @@ function App() {
   const [heartbeatNow, setHeartbeatNow] = useState(() => Date.now());
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState<LoadingState>({ attendance: false, unknown: false, cameras: false, users: false });
+  const [piOnline, setPiOnline] = useState(false);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [date, setDate] = useState(today());
   const [attendanceRange, setAttendanceRange] = useState<AttendanceRange>('today');
@@ -868,6 +871,7 @@ function App() {
   useEffect(() => onAuthStateChanged(auth, currentUser => {
     if (registering.current) return;
     setUser(currentUser);
+    setAttendance([]); setUnknown([]); setUsers([]); setCameras([]); setCamerasLoaded(false);
     setIsAdmin(false);
     setRoleChecked(!currentUser);
     if (currentUser) {
@@ -911,7 +915,7 @@ function App() {
   }, [user, isAdmin, tab, copy.common.user]);
 
   useEffect(() => {
-    if (!user || (!user.emailVerified && !isAdmin) || demoMode || (tab !== 'overview' && tab !== 'attendance')) {
+    if (piDataMode || !user || (!user.emailVerified && !isAdmin) || demoMode || (tab !== 'overview' && tab !== 'attendance')) {
       setLoading(current => ({ ...current, attendance: false }));
       return;
     }
@@ -930,7 +934,7 @@ function App() {
   }, [user, isAdmin, demoMode, tab, attendanceRange, date, copy]);
 
   useEffect(() => {
-    if (!user || !isAdmin || demoMode || (tab !== 'overview' && tab !== 'unknown')) {
+    if (piDataMode || !user || !isAdmin || demoMode || (tab !== 'overview' && tab !== 'unknown')) {
       setLoading(current => ({ ...current, unknown: false }));
       return;
     }
@@ -956,7 +960,7 @@ function App() {
   }, [user, isAdmin, tab, copy]);
 
   useEffect(() => {
-    if (!user || (!user.emailVerified && !isAdmin) || demoMode) {
+    if (piDataMode || !user || (!user.emailVerified && !isAdmin) || demoMode) {
       setCamerasLoaded(false);
       setLoading(current => ({ ...current, cameras: false }));
       return;
@@ -982,24 +986,63 @@ function App() {
   }, [user]);
 
   const refreshUsers = useCallback(async () => {
-    if (!isAdmin || demoMode || apiOnline !== true) return;
+    if (!roleChecked || !isAdmin || demoMode || (piDataMode ? !piOnline : apiOnline !== true)) return;
+    const expectedUid = auth.currentUser?.uid;
     setLoading(current => ({ ...current, users: true }));
     try {
-      setUsers(await getUsers());
+      const rows = await getUsers();
+      if (auth.currentUser?.uid === expectedUid) setUsers(rows);
     } catch {
       setUsers([]);
     } finally {
       setLoading(current => ({ ...current, users: false }));
     }
-  }, [isAdmin, demoMode, apiOnline]);
+  }, [roleChecked, isAdmin, demoMode, apiOnline, piOnline]);
 
   useEffect(() => {
-    if (!user || !isAdmin || demoMode || apiOnline !== true || (tab !== 'overview' && tab !== 'users')) {
+    if (piDataMode || !user || !isAdmin || demoMode || apiOnline !== true || (tab !== 'overview' && tab !== 'users')) {
       setLoading(current => ({ ...current, users: false }));
       return;
     }
     void refreshUsers();
   }, [user, isAdmin, demoMode, apiOnline, tab, refreshUsers]);
+
+  useEffect(() => {
+    if (!piDataMode) return;
+    if (!user || !roleChecked || !isAdmin || demoMode) {
+      setAttendance([]); setUnknown([]); setUsers([]); setCameras([]); setPiOnline(false);
+      setLoading({ attendance: false, unknown: false, cameras: false, users: false });
+      return;
+    }
+    let active = true;
+    let timer: number | undefined;
+    let controller: AbortController | undefined;
+    setAttendance([]); setUnknown([]);
+    setLoading({ attendance: true, unknown: true, cameras: true, users: true });
+    const poll = async () => {
+      controller = new AbortController();
+      const timeout = window.setTimeout(() => controller?.abort(), 30_000);
+      const bounds = attendanceBounds(tab, attendanceRange, date);
+      try {
+        const data = await getPiDashboard(bounds.start, bounds.end, controller.signal);
+        if (!active) return;
+        setAttendance(data.attendance); setUnknown(data.unknown); setCameras(data.cameras); setUsers(data.users);
+        setCamerasLoaded(true); setPiOnline(true); setError('');
+      } catch (failure) {
+        if (!active) return;
+        setPiOnline(false);
+        setError(failure instanceof Error ? failure.message : 'Pi dashboard unavailable');
+      } finally {
+        window.clearTimeout(timeout);
+        if (active) {
+          setLoading({ attendance: false, unknown: false, cameras: false, users: false });
+          timer = window.setTimeout(poll, 10_000);
+        }
+      }
+    };
+    void poll();
+    return () => { active = false; controller?.abort(); if (timer !== undefined) window.clearTimeout(timer); };
+  }, [user, roleChecked, isAdmin, demoMode, tab, attendanceRange, date]);
 
   useEffect(() => {
     if (!user) {
@@ -1079,20 +1122,23 @@ function App() {
   }
 
   const bounds = attendanceBounds(tab, attendanceRange, date);
-  const sourceAttendance = demoMode ? mock.attendance.filter(item => item.date >= bounds.start && item.date <= bounds.end) : attendance;
-  const sourceUnknown = demoMode ? mock.unknown : unknown;
+  const canReadPi = !piDataMode || (roleChecked && isAdmin);
+  const sourceAttendance = demoMode ? mock.attendance.filter(item => item.date >= bounds.start && item.date <= bounds.end) : canReadPi ? attendance : [];
+  const sourceUnknown = demoMode ? mock.unknown : canReadPi ? unknown : [];
   const sourceCameras = demoMode
     ? mock.cameras
-    : cameras.map(camera => ({ ...camera, status: cameraHeartbeatOnline(camera, heartbeatNow) ? 'online' as const : 'offline' as const }));
-  const sourceUsers = demoMode ? mock.users : users;
+    : (canReadPi ? cameras : []).map(camera => ({ ...camera, status: cameraHeartbeatOnline(camera, heartbeatNow) ? 'online' as const : 'offline' as const }));
+  const overviewAttendance = piDataMode && !demoMode ? sourceAttendance.filter(entry => entry.date === today()) : sourceAttendance;
+  const overviewUnknown = piDataMode && !demoMode ? sourceUnknown.filter(entry => entry.timestamp && piIsoDate(entry.timestamp.toDate()) === today()) : sourceUnknown;
+  const sourceUsers = demoMode ? mock.users : canReadPi ? users : [];
   const deferredSearch = useDeferredValue(search);
   const filteredAttendance = useMemo(() => sourceAttendance.filter(item => {
     const matchesSearch = `${item.name} ${item.user_id} ${item.camera_id}`.toLowerCase().includes(deferredSearch.toLowerCase());
-    const matchesCamera = cameraFilter === 'all' || item.camera_id === cameraFilter;
+    const matchesCamera = cameraFilter === 'all' || (item.camera_ids ?? [item.camera_id]).includes(cameraFilter);
     return matchesSearch && matchesCamera;
   }), [sourceAttendance, deferredSearch, cameraFilter]);
   const online = sourceCameras.filter(camera => camera.status === 'online').length;
-  const totalCameras = sourceCameras.length > 0 ? sourceCameras.length : 3;
+  const totalCameras = sourceCameras.length > 0 ? sourceCameras.length : piDataMode ? 0 : 3;
   const settings = <SettingsDialog copy={copy} language={language} themeSetting={themeSetting} layoutMode={layoutMode} use24Hour={use24Hour} showSeconds={showSeconds} demoMode={demoMode} user={user} username={username} userPfp={userPfp} onLanguage={changeLanguage} onThemeSetting={changeThemeSetting} onLayoutMode={changeLayoutMode} onUse24Hour={setUse24Hour} onShowSeconds={setShowSeconds} onDemoMode={changeDemoMode} onUpdateAvatar={handleUpdateAvatar} onSignOut={user ? () => signOut(auth) : undefined} onClose={() => setSettingsOpen(false)} />;
 
   if (!user) return <><Login copy={copy} language={language} themeSetting={themeSetting} layoutMode={layoutMode} use24Hour={use24Hour} showSeconds={showSeconds} demoMode={demoMode} onLanguage={changeLanguage} onThemeSetting={changeThemeSetting} onLayoutMode={changeLayoutMode} onUse24Hour={setUse24Hour} onShowSeconds={setShowSeconds} onDemoMode={changeDemoMode} onRegistrationState={value => { registering.current = value; }} /><ToastViewport toasts={toasts} /></>;
@@ -1198,12 +1244,12 @@ function App() {
       {error && <div className="notice">{error}<button onClick={() => setError('')} aria-label={copy.common.close}>×</button></div>}
       <div className="tab-stage" key={tab}>
         {tab === 'overview' && (layoutMode === 'bento'
-          ? <PersonalizedBentoDashboard user={user} username={username} isAdmin={isAdmin} attendance={sourceAttendance} cameras={sourceCameras} unknown={sourceUnknown} users={sourceUsers} copy={copy} language={language} totalCameras={totalCameras} loading={!demoMode && (loading.attendance || loading.cameras || (isAdmin && (loading.unknown || loading.users)))} onNavigateTab={key => setTab(key)} onExportCsv={() => exportAttendanceCsv(sourceAttendance, copy, today(), notify)} onNotify={notify} />
-          : <Overview copy={copy} attendance={sourceAttendance} unknown={sourceUnknown} cameras={sourceCameras} users={sourceUsers} isAdmin={isAdmin} totalCameras={totalCameras} loading={!demoMode && (loading.attendance || loading.cameras || (isAdmin && (loading.unknown || loading.users)))} />
+          ? <PersonalizedBentoDashboard user={user} username={username} isAdmin={isAdmin} attendance={overviewAttendance} trendAttendance={piDataMode && !demoMode ? sourceAttendance : undefined} cameras={sourceCameras} unknown={overviewUnknown} users={sourceUsers} copy={copy} language={language} totalCameras={totalCameras} loading={!demoMode && (loading.attendance || loading.cameras || (isAdmin && (loading.unknown || loading.users)))} onNavigateTab={key => setTab(key)} onExportCsv={() => exportAttendanceCsv(overviewAttendance, copy, today(), notify)} onNotify={notify} />
+          : <Overview copy={copy} attendance={overviewAttendance} unknown={overviewUnknown} cameras={sourceCameras} users={sourceUsers} isAdmin={isAdmin} totalCameras={totalCameras} loading={!demoMode && (loading.attendance || loading.cameras || (isAdmin && (loading.unknown || loading.users)))} />
         )}
         {tab === 'attendance' && <AttendanceView copy={copy} language={language} date={date} setDate={setDate} range={attendanceRange} setRange={setAttendanceRange} search={search} setSearch={setSearch} cameraFilter={cameraFilter} setCameraFilter={setCameraFilter} cameras={sourceCameras} entries={filteredAttendance} loading={!demoMode && loading.attendance} onNotify={notify} />}
-        {isAdmin && tab === 'users' && <Suspense fallback={<Skeleton rows={5} />}><UsersView copy={copy} users={sourceUsers} apiOnline={apiOnline} demoMode={demoMode} loading={!demoMode && loading.users} onRefresh={async () => { await refreshUsers(); notify(copy.users.refreshed, 'info'); }} onChanged={refreshUsers} onError={setError} onNotify={notify} /></Suspense>}
-        {isAdmin && tab === 'unknown' && <Suspense fallback={<Skeleton rows={5} />}><UnknownView copy={copy} events={sourceUnknown} loading={!demoMode && loading.unknown} apiOnline={apiOnline === true && !demoMode} demoMode={demoMode} onError={setError} onNotify={notify} /></Suspense>}
+        {isAdmin && tab === 'users' && <Suspense fallback={<Skeleton rows={5} />}><UsersView copy={copy} users={sourceUsers} apiOnline={piDataMode ? piOnline : apiOnline} demoMode={demoMode} loading={!demoMode && loading.users} onRefresh={async () => { await refreshUsers(); notify(copy.users.refreshed, 'info'); }} onChanged={refreshUsers} onError={setError} onNotify={notify} /></Suspense>}
+        {isAdmin && tab === 'unknown' && <Suspense fallback={<Skeleton rows={5} />}><UnknownView copy={copy} events={sourceUnknown} readOnly={piDataMode && !demoMode} loading={!demoMode && loading.unknown} apiOnline={apiOnline === true && !demoMode} demoMode={demoMode} onError={setError} onNotify={notify} /></Suspense>}
         {tab === 'devices' && <DeviceView copy={copy} cameras={sourceCameras} loading={!demoMode && loading.cameras} />}
         {isAdmin && tab === 'recog' && <Suspense fallback={<Skeleton rows={5} />}><PiPanel uid={user.uid} locale={copy.locale} /></Suspense>}
         {isAdmin && tab === 'admin' && <Suspense fallback={<Skeleton rows={5} />}><AdminView copy={copy} currentUid={user.uid} sessions={sessions} apiOnline={apiOnline === true} onError={setError} onNotify={notify} /></Suspense>}
@@ -1339,9 +1385,9 @@ function Overview({ copy, attendance, unknown, cameras, users, isAdmin, loading,
 
 function AttendanceView({ copy, language, date, setDate, range, setRange, search, setSearch, cameraFilter, setCameraFilter, cameras, entries, loading, onNotify }: { copy: Copy; language: Language; date: string; setDate: (value: string) => void; range: AttendanceRange; setRange: (value: AttendanceRange) => void; search: string; setSearch: (value: string) => void; cameraFilter: string; setCameraFilter: (value: string) => void; cameras: Camera[]; entries: Attendance[]; loading: boolean; onNotify: (message: string, type?: Toast['type']) => void }) {
   const availableCameraIds = useMemo(() => {
-    const ids = new Set<string>(['camera-1', 'camera-2', 'camera-3']);
+    const ids = new Set<string>(piDataMode ? [] : ['camera-1', 'camera-2', 'camera-3']);
     cameras.forEach(c => ids.add(c.camera_id || c.id));
-    entries.forEach(e => { if (e.camera_id) ids.add(e.camera_id); });
+    entries.forEach(e => (e.camera_ids ?? [e.camera_id]).forEach(id => { if (id) ids.add(id); }));
     return Array.from(ids).sort();
   }, [cameras, entries]);
 
@@ -1376,7 +1422,7 @@ function AttendanceRows({ copy, entries, loading }: { copy: Copy; entries: Atten
 function DeviceView({ copy, cameras, loading }: { copy: Copy; cameras: Camera[]; loading: boolean }) {
   if (loading) return <div className="device-grid"><section className="panel"><Skeleton rows={4} /></section><section className="panel"><Skeleton rows={4} /></section><section className="panel"><Skeleton rows={4} /></section></div>;
   return <div className="device-grid">{cameras.map((camera, index) => {
-    const displayName = camera.camera_id === 'camera-1' || camera.id === 'camera-1' || index === 0
+    const displayName = piDataMode ? camera.name : camera.camera_id === 'camera-1' || camera.id === 'camera-1' || index === 0
       ? 'Camera 1'
       : camera.camera_id === 'camera-2' || camera.id === 'camera-2' || index === 1
       ? 'Camera 2'

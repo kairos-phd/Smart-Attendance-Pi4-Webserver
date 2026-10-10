@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import requests
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Path, Request
+from starlette.concurrency import run_in_threadpool
 from firebase_admin import db as realtime_db
 from pydantic import BaseModel, ConfigDict, StrictBool, Field, model_validator
 
@@ -67,17 +68,23 @@ class PiProxy:
                    [value.strip() for value in os.getenv('PI_CAMERA_IDS', 'icspring,jieli,sonix').split(',') if value.strip()],
                    '/api/control' if mode == 'legacy-loopback' else '/api/control/remote')
 
-    def request(self, method, path, authorization, **kwargs):
-        if path not in {'/health', self.control_path, '/api/recognition-events', '/api/attendance'}:
+    def request(self, method, path, authorization, content_type=None, **kwargs):
+        if path not in {'/health', self.control_path, '/api/recognition-events', '/api/attendance', '/api/dashboard', '/api/users'} and not re.fullmatch(r'/api/users/[A-Za-z0-9_-]{1,128}/inactive', path):
             raise HTTPException(400, 'Unsupported Pi route')
         headers = {} if path == '/api/control' else {'Authorization': f'Bearer {self.token}' if self.token else authorization or ''}
+        if content_type:
+            headers['Content-Type'] = content_type
+        enrollment = method == 'POST' and path == '/api/users'
         try:
-            response = requests.request(method, self.base + path, headers=headers, timeout=(3, 8),
+            response = requests.request(method, self.base + path, headers=headers, timeout=(3, 90 if enrollment else 8),
                                         allow_redirects=False, **kwargs)
-            if response.status_code != 200:
-                raise HTTPException(502, f'Pi API returned HTTP {response.status_code}')
-            return response.json()
+            if response.status_code not in {200, 201, 204}:
+                code = response.status_code if 400 <= response.status_code < 500 else 502
+                raise HTTPException(code, f'Pi API returned HTTP {response.status_code}')
+            return response.json() if response.status_code != 204 else None
         except (requests.RequestException, ValueError) as exc:
+            if enrollment:
+                raise HTTPException(504, 'Enrollment outcome is uncertain. Refresh registered users before retrying; the Pi may have saved it.') from exc
             raise HTTPException(502, 'Pi API unavailable or returned an invalid response') from exc
 
 
@@ -166,3 +173,48 @@ def delete_webrtc_session(session_id: str = Path(pattern=r'^[0-9a-f]{32}$'), adm
     except Exception as exc:
         raise HTTPException(502, 'Firebase signaling cleanup is unavailable') from exc
     return {'deleted': True}
+
+
+@router.get('/dashboard')
+def pi_dashboard(start_date: str | None = None, end_date: str | None = None,
+                 after_attendance_id: int = Query(default=0, ge=-1),
+                 after_unknown_rowid: int = Query(default=0, ge=-1),
+                 limit: int = Query(default=500, ge=1, le=500),
+                 authorization: str | None = Header(default=None)):
+    params = {'after_attendance_id': after_attendance_id, 'after_unknown_rowid': after_unknown_rowid, 'limit': limit}
+    if start_date is not None: params['start_date'] = start_date
+    if end_date is not None: params['end_date'] = end_date
+    return PiProxy.from_env().request('GET', '/api/dashboard', authorization, params=params)
+
+
+def user_view(row):
+    return {'id': row['user_id'], 'name': row['name'], 'student_id': row.get('student_id'),
+            'status': row['status'], 'registration_date': row.get('created_at')}
+
+
+@router.get('/users')
+def pi_users(authorization: str | None = Header(default=None)):
+    return [user_view(row) for row in PiProxy.from_env().request('GET', '/api/users', authorization)]
+
+
+@router.post('/users', status_code=201)
+async def pi_enroll(request: Request, authorization: str | None = Header(default=None)):
+    content_type = request.headers.get('content-type', '')
+    if not content_type.startswith('multipart/form-data;'):
+        raise HTTPException(415, 'Enrollment requires multipart form data')
+    maximum = 64 * 1024 * 1024
+    body, length = [], 0
+    async for chunk in request.stream():
+        length += len(chunk)
+        if length > maximum:
+            raise HTTPException(413, 'Enrollment upload exceeds 64 MB')
+        body.append(chunk)
+    row = await run_in_threadpool(PiProxy.from_env().request, 'POST', '/api/users', authorization,
+                                 content_type=content_type, data=b''.join(body))
+    return user_view(row)
+
+
+@router.delete('/users/{user_id}')
+def pi_deactivate(user_id: str = Path(pattern=r'^[A-Za-z0-9_-]{1,128}$'),
+                  authorization: str | None = Header(default=None)):
+    return PiProxy.from_env().request('PATCH', f'/api/users/{user_id}/inactive', authorization)

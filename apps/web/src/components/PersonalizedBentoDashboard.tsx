@@ -3,12 +3,14 @@ import type { Attendance, Camera, ManagedUser, UnknownEvent } from '../types';
 import type { Copy, Language } from '../i18n';
 import { asDate, type Tab } from '../dashboardShared';
 import '../bento-dashboard.css';
+import { piIsoDate, piOverviewAttendance } from '../piData';
 
 export interface PersonalizedBentoDashboardProps {
   user: { uid: string; email?: string | null; displayName?: string | null } | null;
   username: string;
   isAdmin: boolean;
   attendance: Attendance[];
+  trendAttendance?: Attendance[];
   cameras: Camera[];
   unknown: UnknownEvent[];
   users: ManagedUser[];
@@ -28,6 +30,7 @@ export const PersonalizedBentoDashboard: React.FC<PersonalizedBentoDashboardProp
   username,
   isAdmin,
   attendance,
+  trendAttendance,
   cameras,
   unknown,
   users,
@@ -55,9 +58,10 @@ export const PersonalizedBentoDashboard: React.FC<PersonalizedBentoDashboardProp
 
   // Today's attendance calculation
   const todayStr = useMemo(() => {
+    if (trendAttendance) return piIsoDate();
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }, []);
+  }, [trendAttendance]);
 
   // Filter user's attendance
   const userAttendance = useMemo(() => {
@@ -107,6 +111,7 @@ export const PersonalizedBentoDashboard: React.FC<PersonalizedBentoDashboardProp
 
   // 7-day velocity chart data
   const velocityData = useMemo(() => {
+    if (trendAttendance) return piOverviewAttendance(trendAttendance, copy.locale).trend;
     const days: { label: string; dateStr: string; count: number }[] = [];
     const now = new Date();
     for (let i = 6; i >= 0; i--) {
@@ -118,7 +123,7 @@ export const PersonalizedBentoDashboard: React.FC<PersonalizedBentoDashboardProp
       days.push({ label: dayName, dateStr, count });
     }
     return days;
-  }, [attendance, copy.locale]);
+  }, [attendance, trendAttendance, copy.locale]);
 
   const maxVelocity = Math.max(...velocityData.map(d => d.count), 5);
 
