@@ -1,5 +1,5 @@
 import { type FormEvent, useRef, useState } from 'react';
-import { deactivateUser, enrollUser } from '../api';
+import { deactivateUser, enrollUser, piDataMode } from '../api';
 import { apiActionError, Skeleton, type Toast } from '../dashboardShared';
 import type { Copy } from '../i18n';
 import type { ManagedUser } from '../types';
@@ -83,7 +83,7 @@ export default function UsersView({ copy, users, apiOnline, demoMode, loading, o
     </section>
     <section className="panel">
       <div className="panel-title compact"><div><h2>{copy.users.registered}</h2><p>{copy.attendance.showing(users.length)}</p></div><button className="secondary refresh-button" disabled={!serviceReady || loading} onClick={() => void onRefresh()}>↻ {copy.common.refresh}</button></div>
-      {loading ? <Skeleton rows={4} /> : <div className="user-list">{users.map(person => <article key={person.id} className="user-row"><div className="avatar">{person.name.slice(0, 1).toUpperCase()}</div><div><strong>{person.name}</strong><small>{person.student_id || copy.users.noId} · {person.status === 'active' ? copy.common.active : copy.common.inactive} · {copy.users.samples(person.enrollment_samples ?? 1)}</small></div>{person.status === 'active' && <button className="danger text-button" disabled={!serviceReady} title={serviceReady ? copy.users.deactivateTitle : copy.users.offlineTitle} onClick={() => void deactivate(person.id)}>{copy.users.deactivate}</button>}</article>)}{!users.length && <p className="empty">{apiOnline === false ? copy.users.unavailableProfiles : apiOnline === null ? copy.users.checkingProfiles : copy.users.empty}</p>}</div>}
+      {loading ? <Skeleton rows={4} /> : <div className="user-list">{users.map(person => <article key={person.id} className="user-row"><div className="avatar">{person.name.slice(0, 1).toUpperCase()}</div><div><strong>{person.name}</strong><small>{person.student_id || copy.users.noId} · {person.status === 'active' ? copy.common.active : copy.common.inactive} · {piDataMode && person.enrollment_samples === undefined ? '—' : copy.users.samples(person.enrollment_samples ?? 1)}</small></div>{person.status === 'active' && <button className="danger text-button" disabled={!serviceReady} title={serviceReady ? copy.users.deactivateTitle : copy.users.offlineTitle} onClick={() => void deactivate(person.id)}>{copy.users.deactivate}</button>}</article>)}{!users.length && <p className="empty">{apiOnline === false ? copy.users.unavailableProfiles : apiOnline === null ? copy.users.checkingProfiles : copy.users.empty}</p>}</div>}
     </section>
   </div>;
 }

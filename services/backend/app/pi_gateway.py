@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from .pi_proxy import PiProxy, router, signaling_database_url
+from .gateway_accounts import router as accounts_router
 
 
 MAX_PROXY_BODY_BYTES = 64 * 1024 * 1024
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST', 'PATCH', 'DELETE'],
                        allow_headers=['Authorization', 'Content-Type'])
     app.include_router(router)
+    app.include_router(accounts_router)
 
     @app.get('/health')
     def health():

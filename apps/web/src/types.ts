@@ -6,6 +6,7 @@ export type Attendance = {
   user_id: string;
   name: string;
   camera_id: string;
+  camera_ids?: string[];
   timestamp?: FirestoreTimestampLike;
   date: string;
   confidence: number;
@@ -22,6 +23,8 @@ export type UnknownEvent = {
   confidence: number;
   image_url?: string | null;
   recognition_status: 'unknown';
+  reason?: string;
+  model_version?: string;
   review_status?: 'pending' | 'reviewed' | 'dismissed';
   second_best_confidence?: number;
   reviewed_at?: FirestoreTimestampLike;

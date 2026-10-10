@@ -1,15 +1,18 @@
 import { auth } from './firebase';
 import type { AdminAccount, ManagedUser } from './types';
+import { loadPiDashboard, type PiDashboard } from './piData';
+export const piDataMode = import.meta.env.VITE_DATA_SOURCE === 'pi';
 
 const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '');
 const piBase = import.meta.env.VITE_PI_API_BASE_URL?.replace(/\/$/, '') || base;
 
 export async function checkApiHealth(timeoutMs = 3000): Promise<boolean> {
-  if (!base) return false;
+  const origin = piDataMode ? piBase : base;
+  if (!origin) return false;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${base}/health`, {
+    const response = await fetch(`${origin}/health`, {
       method: 'GET',
       cache: 'no-store',
       signal: controller.signal,
@@ -24,7 +27,7 @@ export async function checkApiHealth(timeoutMs = 3000): Promise<boolean> {
   }
 }
 
-async function request(path: string, init: RequestInit = {}, origin = base) {
+async function request(path: string, init: RequestInit = {}, origin = piDataMode ? piBase : base) {
   if (!origin) throw new Error('API origin is not configured');
   const user = auth.currentUser;
   if (!user) throw new Error('Please sign in first');
@@ -47,7 +50,8 @@ async function request(path: string, init: RequestInit = {}, origin = base) {
 }
 
 export async function getUsers(): Promise<ManagedUser[]> {
-  return (await request('/api/users')).json();
+  const rows = await (await request(piDataMode ? '/api/pi/users' : '/api/users')).json();
+  return Array.isArray(rows) ? rows : rows.users;
 }
 
 export async function enrollUser(name: string, studentId: string, photos: File[]): Promise<ManagedUser> {
@@ -55,11 +59,11 @@ export async function enrollUser(name: string, studentId: string, photos: File[]
   body.append('name', name);
   body.append('student_id', studentId);
   photos.forEach(photo => body.append('face_images', photo));
-  return (await request('/api/users', { method: 'POST', body })).json();
+  return (await request(piDataMode ? '/api/pi/users' : '/api/users', { method: 'POST', body })).json();
 }
 
 export async function deactivateUser(id: string): Promise<void> {
-  await request(`/api/users/${id}`, { method: 'DELETE' });
+  await request(`${piDataMode ? '/api/pi/users' : '/api/users'}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function getUnknownImage(eventId: string): Promise<Blob> {
@@ -79,11 +83,11 @@ export async function deleteUnknownImage(eventId: string): Promise<void> {
 }
 
 export async function getAdminAccounts(): Promise<AdminAccount[]> {
-  return (await request('/api/admin/accounts')).json();
+  return (await request(piDataMode ? '/api/pi/admin/accounts' : '/api/admin/accounts')).json();
 }
 
 export async function updateAdminAccount(id: string, changes: { role?: 'admin' | 'viewer'; disabled?: boolean }): Promise<AdminAccount> {
-  return (await request(`/api/admin/accounts/${id}`, {
+  return (await request(`${piDataMode ? '/api/pi/admin/accounts' : '/api/admin/accounts'}/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(changes),
@@ -115,4 +119,11 @@ export async function createPiSession(cameraId: string, sdp: string): Promise<{ 
 }
 export async function deletePiSession(sessionId: string): Promise<void> {
   await piRequest(`/api/pi/webrtc-sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+}
+
+export async function getPiDashboard(start: string, end: string, signal: AbortSignal) {
+  return loadPiDashboard(async (attendanceCursor, unknownCursor) => {
+    const params = new URLSearchParams({ start_date: start, end_date: end, after_attendance_id: String(attendanceCursor), after_unknown_rowid: String(unknownCursor), limit: '500' });
+    return (await piRequest(`/api/pi/dashboard?${params}`, { signal, cache: 'no-store' })).json() as Promise<PiDashboard>;
+  });
 }
